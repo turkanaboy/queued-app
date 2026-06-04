@@ -81,6 +81,7 @@ export default function ProfilePage() {
   }
 
   async function handleSignOut() {
+    if (!window.confirm('Sign out of Queued?')) return
     await supabase.auth.signOut()
     navigate('/login')
   }
