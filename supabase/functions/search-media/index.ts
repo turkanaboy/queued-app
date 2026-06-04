@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const TMDB_BASE      = 'https://api.themoviedb.org/3'
+const TMDB_BASE       = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_W300 = 'https://image.tmdb.org/t/p/w300'
 const TMDB_LOGO_ORIG  = 'https://image.tmdb.org/t/p/original'
 
@@ -31,7 +31,30 @@ serve(async (req) => {
   const action  = searchParams.get('action') ?? 'search'
   const apiKey  = Deno.env.get('TMDB_API_KEY')
 
-  // ── Watch providers (flatrate + rent + buy) ──────────────────
+  // ── Trending / popular carousel ──────────────────────────────
+  if (action === 'trending') {
+    const mediaType = searchParams.get('media_type') ?? 'movie' // 'movie' | 'tv'
+    const page      = searchParams.get('page') ?? '1'
+
+    const res  = await fetch(`${TMDB_BASE}/trending/${mediaType}/week?api_key=${apiKey}&page=${page}&language=en-US`)
+    const data = await res.json()
+
+    const results = (data.results ?? [])
+      .filter((r: any) => r.poster_path)
+      .map((r: any) => ({
+        media_id:         String(r.id),
+        media_type:       r.media_type ?? mediaType,
+        media_title:      r.title ?? r.name,
+        media_poster_url: `${TMDB_IMAGE_W300}${r.poster_path}`,
+        year:             (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
+        vote_average:     r.vote_average,
+        genre_ids:        r.genre_ids ?? [],
+      }))
+
+    return json({ results, total_pages: data.total_pages ?? 1 })
+  }
+
+  // ── Watch providers ──────────────────────────────────────────
   if (action === 'providers') {
     const mediaType = searchParams.get('media_type')
     const mediaId   = searchParams.get('media_id')
@@ -48,7 +71,7 @@ serve(async (req) => {
         flatrate: mapProviders(r.flatrate),
         rent:     mapProviders(r.rent),
         buy:      mapProviders(r.buy),
-        link:     r.link ?? null, // JustWatch deep link for this title
+        link:     r.link ?? null,
       }
     })
   }

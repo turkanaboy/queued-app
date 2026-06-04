@@ -1,0 +1,194 @@
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import RatingModal from '../components/RatingModal'
+
+const MEDIA_TYPES = [
+  { key: 'movie', label: '🎬 Movies' },
+  { key: 'tv',    label: '📺 TV Shows' },
+]
+
+async function fetchTrending(mediaType, page = 1) {
+  const token = (await supabase.auth.getSession()).data.session?.access_token
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=trending&media_type=${mediaType}&page=${page}`,
+    { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+  )
+  return res.json()
+}
+
+export default function CollectionPage() {
+  const { session } = useAuth()
+
+  // Separate state per media type
+  const [items, setItems] = useState({ movie: [], tv: [] })
+  const [pages, setPages] = useState({ movie: 1, tv: 1 })
+  const [loading, setLoading] = useState({ movie: true, tv: true })
+
+  // User's existing log entries (media_id → entry) for overlay display
+  const [logMap, setLogMap] = useState({})
+
+  // Rating modal
+  const [ratingItem, setRatingItem] = useState(null)
+
+  useEffect(() => {
+    loadSection('movie', 1)
+    loadSection('tv', 1)
+    fetchUserLog()
+  }, [session])
+
+  async function fetchUserLog() {
+    const { data } = await supabase
+      .from('user_media_log')
+      .select('media_id, rating, review')
+      .eq('user_id', session.user.id)
+    const map = {}
+    for (const entry of data ?? []) map[entry.media_id] = entry
+    setLogMap(map)
+  }
+
+  async function loadSection(mediaType, page) {
+    setLoading(prev => ({ ...prev, [mediaType]: true }))
+    const json = await fetchTrending(mediaType, page)
+    setItems(prev => ({
+      ...prev,
+      [mediaType]: page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])],
+    }))
+    setPages(prev => ({ ...prev, [mediaType]: page }))
+    setLoading(prev => ({ ...prev, [mediaType]: false }))
+  }
+
+  async function refresh(mediaType) {
+    // Rotate to a random page (1-5) different from current
+    const next = pages[mediaType] >= 5 ? 1 : pages[mediaType] + 1
+    loadSection(mediaType, next)
+  }
+
+  function openRating(item) {
+    setRatingItem(item)
+  }
+
+  function handleSaved() {
+    fetchUserLog() // refresh overlay data
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="anim-scale">
+        <h1 className="text-3xl font-extrabold text-white">Discover</h1>
+        <p className="text-white/50 text-sm mt-0.5">Rate what you've watched to build your collection</p>
+      </div>
+
+      {MEDIA_TYPES.map(({ key, label }) => (
+        <section key={key} className="anim-up">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-white font-extrabold text-lg">{label}</p>
+            <button
+              onClick={() => refresh(key)}
+              disabled={loading[key]}
+              className="btn-press text-xs font-bold text-white/50 hover:text-white border border-white/20 px-3 py-1.5 rounded-full disabled:opacity-30"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            >
+              {loading[key] ? '…' : '↻ Refresh'}
+            </button>
+          </div>
+
+          {loading[key] && items[key].length === 0 ? (
+            <div className="flex gap-3 overflow-hidden">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="shrink-0 w-[100px] h-[150px] rounded-2xl animate-pulse"
+                  style={{ background: 'rgba(255,255,255,0.1)' }} />
+              ))}
+            </div>
+          ) : (
+            <div className="poster-scroll -mx-4 px-4">
+              {items[key].map(item => {
+                const logged = logMap[item.media_id]
+                return (
+                  <PosterCard
+                    key={item.media_id}
+                    item={item}
+                    logEntry={logged}
+                    onTap={() => openRating(item)}
+                  />
+                )
+              })}
+
+              {/* Load more */}
+              <button
+                onClick={() => loadSection(key, pages[key] + 1)}
+                disabled={loading[key]}
+                className="btn-press shrink-0 w-[100px] h-[150px] rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
+              >
+                <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
+                <span className="text-[10px] font-semibold">More</span>
+              </button>
+            </div>
+          )}
+        </section>
+      ))}
+
+      {/* Rating modal */}
+      {ratingItem && (
+        <RatingModal
+          item={ratingItem}
+          existingEntry={logMap[ratingItem.media_id]}
+          onClose={() => setRatingItem(null)}
+          onSaved={handleSaved}
+        />
+      )}
+    </div>
+  )
+}
+
+function PosterCard({ item, logEntry, onTap }) {
+  return (
+    <button
+      onClick={onTap}
+      className="btn-press shrink-0 w-[100px] text-left group"
+    >
+      <div className="relative rounded-2xl overflow-hidden shadow-lg">
+        <img
+          src={item.media_poster_url}
+          alt={item.media_title}
+          className="w-[100px] h-[150px] object-cover"
+        />
+
+        {/* Rated overlay */}
+        {logEntry ? (
+          <div className="absolute inset-0 flex flex-col justify-end"
+            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}>
+            <div className="px-2 pb-2">
+              <div className="flex items-center gap-0.5 mb-0.5">
+                <span className="text-amber-300 text-xs">★</span>
+                <span className="text-white text-xs font-bold">{logEntry.rating}</span>
+              </div>
+              {logEntry.review && (
+                <p className="text-white/50 text-[9px] line-clamp-2 italic">"{logEntry.review}"</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Hover prompt */
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+            style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <span className="text-white text-2xl">★</span>
+          </div>
+        )}
+
+        {/* Checkmark badge for rated */}
+        {logEntry && (
+          <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-green-400 flex items-center justify-center shadow">
+            <span className="text-white text-[9px] font-bold">✓</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-white/70 text-[10px] font-semibold mt-1.5 leading-tight line-clamp-2">
+        {item.media_title}
+      </p>
+      {item.year && <p className="text-white/30 text-[9px] mt-0.5">{item.year}</p>}
+    </button>
+  )
+}
