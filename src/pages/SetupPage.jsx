@@ -34,8 +34,7 @@ export default function SetupPage() {
     setError('')
     const { error } = await supabase
       .from('users')
-      .update({ username, display_name: displayName || username })
-      .eq('id', session.user.id)
+      .upsert({ id: session.user.id, email: session.user.email, username, display_name: displayName || username })
     if (error) { setError(error.message); setLoading(false); return }
     await refreshProfile()
     navigate('/friends')
