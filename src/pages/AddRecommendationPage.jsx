@@ -4,6 +4,15 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 
+async function tmdbCall(path, session) {
+  const token = (await supabase.auth.getSession()).data.session?.access_token
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`,
+    { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+  )
+  return res.json()
+}
+
 export default function AddRecommendationPage() {
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -11,7 +20,9 @@ export default function AddRecommendationPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
+  const [providers, setProviders] = useState([])
   const [searching, setSearching] = useState(false)
+  const [loadingProviders, setLoadingProviders] = useState(false)
 
   const [friends, setFriends] = useState([])
   const [selectedFriends, setSelectedFriends] = useState([])
@@ -59,20 +70,24 @@ export default function AddRecommendationPage() {
   function handleSearch(q) {
     setQuery(q)
     setSelected(null)
+    setProviders([])
     clearTimeout(debounceRef.current)
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const session = await supabase.auth.getSession()
-      const token = session.data.session?.access_token
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?query=${encodeURIComponent(q)}&type=multi`,
-        { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
-      )
-      const json = await res.json()
+      const json = await tmdbCall(`?query=${encodeURIComponent(q)}&type=multi`)
       setResults(json.results ?? [])
       setSearching(false)
     }, 400)
+  }
+
+  async function selectTitle(r) {
+    setSelected(r)
+    setResults([])
+    setLoadingProviders(true)
+    const json = await tmdbCall(`?action=providers&media_type=${r.media_type}&media_id=${r.media_id}`)
+    setProviders(json.providers ?? [])
+    setLoadingProviders(false)
   }
 
   function toggleFriend(f) {
@@ -98,6 +113,7 @@ export default function AddRecommendationPage() {
         media_title: selected.media_title,
         media_poster_url: selected.media_poster_url,
         note: note.trim() || null,
+        streaming_providers: providers,
       }))
     await supabase.from('recommendations').insert(rows)
     navigate('/friends')
@@ -128,22 +144,19 @@ export default function AddRecommendationPage() {
           />
         </div>
 
-        {searching && (
-          <p className="text-white/40 text-xs text-center">Searching…</p>
-        )}
+        {searching && <p className="text-white/40 text-xs text-center">Searching…</p>}
 
         {results.length > 0 && !selected && (
           <div className="glass rounded-2xl overflow-hidden">
             {results.map(r => (
               <button
                 key={r.media_id}
-                onClick={() => { setSelected(r); setResults([]) }}
+                onClick={() => selectTitle(r)}
                 className="btn-press flex items-center gap-3 w-full px-4 py-3 border-b border-white/10 last:border-0 text-left hover:bg-white/10 transition-colors"
               >
                 {r.media_poster_url
                   ? <img src={r.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
-                  : <div className="w-10 h-14 rounded-xl shrink-0 flex items-center justify-center text-xl"
-                      style={{ background: 'rgba(255,255,255,0.1)' }}>🎬</div>
+                  : <div className="w-10 h-14 rounded-xl shrink-0 flex items-center justify-center text-xl" style={{ background: 'rgba(255,255,255,0.1)' }}>🎬</div>
                 }
                 <div>
                   <p className="text-sm font-bold text-white">{r.media_title}</p>
@@ -155,16 +168,34 @@ export default function AddRecommendationPage() {
         )}
 
         {selected && (
-          <div className="glass rounded-2xl flex items-center gap-3 px-4 py-3">
-            {selected.media_poster_url && (
-              <img src={selected.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white truncate">{selected.media_title}</p>
-              <p className="text-xs text-white/50 capitalize">{selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
+          <div className="glass rounded-2xl p-3 space-y-3">
+            <div className="flex items-center gap-3">
+              {selected.media_poster_url && (
+                <img src={selected.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white truncate">{selected.media_title}</p>
+                <p className="text-xs text-white/50 capitalize">{selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
+              </div>
+              <button onClick={() => { setSelected(null); setQuery(''); setProviders([]) }}
+                className="btn-press text-white/40 hover:text-white text-lg p-1">✕</button>
             </div>
-            <button onClick={() => { setSelected(null); setQuery('') }}
-              className="btn-press text-white/40 hover:text-white text-lg p-1">✕</button>
+
+            {/* Streaming providers */}
+            {loadingProviders ? (
+              <p className="text-white/40 text-xs">Checking where to watch…</p>
+            ) : providers.length > 0 ? (
+              <div>
+                <p className="text-white/50 text-xs mb-1.5">Streaming on</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {providers.map(p => (
+                    <ProviderBadge key={p.provider_id} provider={p} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-white/30 text-xs">Not on major streaming platforms</p>
+            )}
           </div>
         )}
       </div>
@@ -179,23 +210,30 @@ export default function AddRecommendationPage() {
             {friends.map(f => {
               const isSelected = !!selectedFriends.find(s => s.friend.id === f.friend.id)
               const isSent = selected && alreadySent[f.friend.id]
+              // Check platform compatibility
+              const friendPlatforms = f.friend.platforms ?? []
+              const compatible = providers.filter(p => friendPlatforms.includes(p.provider_id))
               return (
                 <button
                   key={f.friend.id}
                   onClick={() => !isSent && toggleFriend(f)}
                   disabled={isSent}
-                  className={`btn-press w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
-                    isSent ? 'opacity-40 cursor-not-allowed' : ''
-                  }`}
+                  className={`btn-press w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${isSent ? 'opacity-40 cursor-not-allowed' : ''}`}
                   style={{
                     background: isSelected && !isSent ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
                     border: isSelected && !isSent ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.15)',
                   }}
                 >
                   <InitialsAvatar name={f.friend.display_name || f.friend.username} size="sm" />
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white">{f.friend.display_name || f.friend.username}</p>
                     {isSent && <p className="text-xs text-white/40">Already sent</p>}
+                    {!isSent && compatible.length > 0 && (
+                      <p className="text-xs text-green-300 font-semibold">✓ On their {compatible.map(p => p.provider_name).join(', ')}</p>
+                    )}
+                    {!isSent && selected && providers.length > 0 && compatible.length === 0 && friendPlatforms.length > 0 && (
+                      <p className="text-xs text-white/30">Not on their platforms</p>
+                    )}
                   </div>
                   {isSelected && !isSent && <span className="text-white font-bold">✓</span>}
                 </button>
@@ -208,7 +246,7 @@ export default function AddRecommendationPage() {
       {/* Note */}
       <div className="anim-up space-y-2">
         <p className="text-white/50 text-xs font-bold uppercase tracking-widest">
-          Note <span className="text-white/30 normal-case font-medium">(optional)</span>
+          Note <span className="text-white/30 normal-case font-normal">(optional)</span>
         </p>
         <div className="relative">
           <textarea
@@ -231,12 +269,27 @@ export default function AddRecommendationPage() {
         className="btn-press w-full py-4 rounded-2xl font-bold text-purple-900 text-sm shadow-xl disabled:opacity-40"
         style={{ background: 'white' }}
       >
-        {submitting
-          ? 'Sending…'
-          : sendableCount > 0
+        {submitting ? 'Sending…' : sendableCount > 0
           ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`
           : 'Select a movie & friend'}
       </button>
     </div>
+  )
+}
+
+function ProviderBadge({ provider, dimmed = false }) {
+  return provider.logo_path ? (
+    <img
+      src={provider.logo_path}
+      alt={provider.provider_name}
+      title={provider.provider_name}
+      className="w-8 h-8 rounded-lg object-cover shadow"
+      style={{ opacity: dimmed ? 0.3 : 1 }}
+    />
+  ) : (
+    <span className="text-xs text-white/60 px-2 py-1 rounded-lg"
+      style={{ background: 'rgba(255,255,255,0.15)', opacity: dimmed ? 0.4 : 1 }}>
+      {provider.provider_name}
+    </span>
   )
 }

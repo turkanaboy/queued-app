@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
+import { PLATFORMS, platformInitials } from '../lib/platforms'
 
 export default function ProfilePage() {
   const { userId } = useParams()
@@ -18,6 +19,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [editingPlatforms, setEditingPlatforms] = useState(false)
+  const [selectedPlatforms, setSelectedPlatforms] = useState([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchProfile(); fetchStats(); fetchActivity() }, [targetId])
@@ -26,6 +29,7 @@ export default function ProfilePage() {
     const { data } = await supabase.from('users').select('*').eq('id', targetId).single()
     setProfile(data)
     setDisplayName(data?.display_name || '')
+    setSelectedPlatforms(data?.platforms ?? [])
     setLoading(false)
   }
 
@@ -59,6 +63,21 @@ export default function ProfilePage() {
     setEditing(false)
     fetchProfile()
     setSaving(false)
+  }
+
+  async function savePlatforms() {
+    setSaving(true)
+    await supabase.from('users').update({ platforms: selectedPlatforms }).eq('id', session.user.id)
+    await refreshProfile()
+    setEditingPlatforms(false)
+    fetchProfile()
+    setSaving(false)
+  }
+
+  function togglePlatform(id) {
+    setSelectedPlatforms(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    )
   }
 
   async function handleSignOut() {
@@ -133,6 +152,69 @@ export default function ProfilePage() {
           <StatCard emoji="⭐" label="Avg rating" value={stats.avgRating ?? '—'} />
         </div>
       )}
+
+      {/* Streaming platforms */}
+      <section className="anim-up">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-white/50 text-xs font-bold uppercase tracking-widest">Streaming platforms</p>
+          {isOwnProfile && !editingPlatforms && (
+            <button onClick={() => setEditingPlatforms(true)}
+              className="btn-press text-xs text-white/50 hover:text-white">Edit</button>
+          )}
+        </div>
+
+        {editingPlatforms ? (
+          <div className="glass rounded-2xl p-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {PLATFORMS.map(p => {
+                const active = selectedPlatforms.includes(p.id)
+                return (
+                  <button key={p.id} type="button" onClick={() => togglePlatform(p.id)}
+                    className="btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
+                    style={{
+                      background: active ? p.color : 'rgba(255,255,255,0.1)',
+                      border: active ? `1px solid ${p.color}` : '1px solid rgba(255,255,255,0.2)',
+                      color: active ? 'white' : 'rgba(255,255,255,0.6)',
+                    }}>
+                    {active && '✓ '}{platformInitials(p.name)}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={savePlatforms} disabled={saving}
+                className="btn-press text-xs font-bold px-4 py-2 rounded-xl text-purple-900"
+                style={{ background: 'white' }}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={() => { setEditingPlatforms(false); setSelectedPlatforms(profile?.platforms ?? []) }}
+                className="btn-press text-xs text-white/50 px-4 py-2 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.1)' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (profile?.platforms ?? []).length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {(profile.platforms).map(id => {
+              const p = PLATFORMS.find(pl => pl.id === id)
+              if (!p) return null
+              return (
+                <span key={id} className="text-xs font-bold px-3 py-1.5 rounded-full text-white"
+                  style={{ background: p.color }}>
+                  {platformInitials(p.name)}
+                </span>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="glass rounded-2xl px-4 py-3 text-center">
+            <p className="text-white/30 text-sm">
+              {isOwnProfile ? 'No platforms added yet — tap Edit to add them' : 'No platforms listed'}
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Recently watched — horizontal poster scroll */}
       <section className="anim-up">

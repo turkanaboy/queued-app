@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+
 import { InitialsAvatar } from '../components/Layout'
 import RecommendationCard from '../components/RecommendationCard'
 
@@ -63,6 +64,9 @@ export default function SharedListPage() {
     await supabase.from('recommendations').update({ deleted_at: new Date().toISOString() }).eq('id', recId)
     fetchRecs()
   }
+
+  const { profile } = useAuth()
+  const myPlatforms = profile?.platforms ?? []
 
   const uid = session.user.id
   const filtered = recs.filter(r => {
@@ -129,6 +133,7 @@ export default function SharedListPage() {
               key={rec.id}
               rec={rec}
               currentUserId={uid}
+              myPlatforms={myPlatforms}
               onStatusChange={updateStatus}
               onRatingChange={updateRating}
               onDelete={softDelete}
