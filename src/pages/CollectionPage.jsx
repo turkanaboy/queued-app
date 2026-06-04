@@ -4,8 +4,10 @@ import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
 
 const MEDIA_TYPES = [
-  { key: 'movie', label: '🎬 Movies' },
-  { key: 'tv',    label: '📺 TV Shows' },
+  { key: 'movie', label: '🎬 Movies',   square: false },
+  { key: 'tv',    label: '📺 TV Shows', square: false },
+  { key: 'book',  label: '📚 Books',    square: false },
+  { key: 'album', label: '🎵 Albums',   square: true  },
 ]
 
 async function fetchTrending(mediaType, page = 1) {
@@ -21,9 +23,9 @@ export default function CollectionPage() {
   const { session } = useAuth()
 
   // Separate state per media type
-  const [items, setItems] = useState({ movie: [], tv: [] })
-  const [pages, setPages] = useState({ movie: 1, tv: 1 })
-  const [loading, setLoading] = useState({ movie: true, tv: true })
+  const [items, setItems] = useState({ movie: [], tv: [], book: [], album: [] })
+  const [pages, setPages] = useState({ movie: 1, tv: 1, book: 1, album: 1 })
+  const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
 
   // User's existing log entries (media_id → entry) for overlay display
   const [logMap, setLogMap] = useState({})
@@ -34,6 +36,8 @@ export default function CollectionPage() {
   useEffect(() => {
     loadSection('movie', 1)
     loadSection('tv', 1)
+    loadSection('book', 1)
+    loadSection('album', 1)
     fetchUserLog()
   }, [session])
 
@@ -79,7 +83,7 @@ export default function CollectionPage() {
         <p className="text-white/50 text-sm mt-0.5">Rate what you've watched to build your collection</p>
       </div>
 
-      {MEDIA_TYPES.map(({ key, label }) => (
+      {MEDIA_TYPES.map(({ key, label, square }) => (
         <section key={key} className="anim-up">
           <div className="flex items-center justify-between mb-3">
             <p className="text-white font-extrabold text-lg">{label}</p>
@@ -96,7 +100,7 @@ export default function CollectionPage() {
           {loading[key] && items[key].length === 0 ? (
             <div className="flex gap-3 overflow-hidden">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="shrink-0 w-[100px] h-[150px] rounded-2xl animate-pulse"
+                <div key={i} className={`shrink-0 rounded-2xl animate-pulse ${square ? 'w-[110px] h-[110px]' : 'w-[100px] h-[150px]'}`}
                   style={{ background: 'rgba(255,255,255,0.1)' }} />
               ))}
             </div>
@@ -109,21 +113,24 @@ export default function CollectionPage() {
                     key={item.media_id}
                     item={item}
                     logEntry={logged}
+                    square={square}
                     onTap={() => openRating(item)}
                   />
                 )
               })}
 
-              {/* Load more */}
-              <button
-                onClick={() => loadSection(key, pages[key] + 1)}
-                disabled={loading[key]}
-                className="btn-press shrink-0 w-[100px] h-[150px] rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30"
-                style={{ background: 'rgba(255,255,255,0.08)' }}
-              >
-                <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
-                <span className="text-[10px] font-semibold">More</span>
-              </button>
+              {/* Load more — albums have page 1 only from RSS */}
+              {key !== 'album' && (
+                <button
+                  onClick={() => loadSection(key, pages[key] + 1)}
+                  disabled={loading[key]}
+                  className={`btn-press shrink-0 rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30 ${square ? 'w-[110px] h-[110px]' : 'w-[100px] h-[150px]'}`}
+                  style={{ background: 'rgba(255,255,255,0.08)' }}
+                >
+                  <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
+                  <span className="text-[10px] font-semibold">More</span>
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -142,17 +149,20 @@ export default function CollectionPage() {
   )
 }
 
-function PosterCard({ item, logEntry, onTap }) {
+function PosterCard({ item, logEntry, square = false, onTap }) {
+  const w = square ? 'w-[110px]' : 'w-[100px]'
+  const h = square ? 'h-[110px]' : 'h-[150px]'
+
   return (
     <button
       onClick={onTap}
-      className="btn-press shrink-0 w-[100px] text-left group"
+      className={`btn-press shrink-0 ${w} text-left group`}
     >
       <div className="relative rounded-2xl overflow-hidden shadow-lg">
         <img
           src={item.media_poster_url}
           alt={item.media_title}
-          className="w-[100px] h-[150px] object-cover"
+          className={`${w} ${h} object-cover`}
         />
 
         {/* Rated overlay */}
@@ -188,6 +198,9 @@ function PosterCard({ item, logEntry, onTap }) {
       <p className="text-white/70 text-[10px] font-semibold mt-1.5 leading-tight line-clamp-2">
         {item.media_title}
       </p>
+      {item.media_creator && (
+        <p className="text-white/40 text-[9px] mt-0.5 truncate">{item.media_creator}</p>
+      )}
       {item.year && <p className="text-white/30 text-[9px] mt-0.5">{item.year}</p>}
     </button>
   )

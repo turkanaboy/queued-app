@@ -50,6 +50,9 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-bold text-white text-sm leading-tight truncate">{rec.media_title}</p>
+              {rec.media_creator && (
+                <p className="text-white/50 text-xs mt-0.5 truncate">{rec.media_creator}</p>
+              )}
               <p className="text-white/40 text-xs mt-0.5 capitalize">{rec.media_type}</p>
             </div>
             <span className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${STATUS_COLORS[rec.recipient_status]}`}>
@@ -71,16 +74,16 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
 
           {rec.rating && <StarDisplay value={rec.rating} className="mt-1.5" />}
 
-          {/* Streaming providers — rent / buy / stream with affiliate links */}
-          {rec.streaming_providers && (
-            <div className="mt-2">
-              <ProviderRows
-                providers={rec.streaming_providers}
-                title={rec.media_title}
-                myPlatforms={myProviderIds}
-              />
-            </div>
-          )}
+          {/* Streaming / buy / listen links with affiliate support */}
+          <div className="mt-2">
+            <ProviderRows
+              providers={rec.streaming_providers}
+              title={rec.media_title}
+              creator={rec.media_creator}
+              mediaType={rec.media_type}
+              myPlatforms={myProviderIds}
+            />
+          </div>
         </div>
       </div>
 

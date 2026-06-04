@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
-import { getProviderLink, getJustWatchLink } from '../lib/affiliates'
+import { getProviderLink, getJustWatchLink, getBookLinks, getAlbumLinks } from '../lib/affiliates'
 
 async function tmdbCall(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -24,10 +24,11 @@ export default function AddRecommendationPage() {
   const { session } = useAuth()
   const navigate = useNavigate()
 
+  const [searchType, setSearchType] = useState('multi')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
-  const [providers, setProviders] = useState(null) // { flatrate, rent, buy, link }
+  const [providers, setProviders] = useState(null) // { flatrate, rent, buy, link } or null for book/album
   const [searching, setSearching] = useState(false)
   const [loadingProviders, setLoadingProviders] = useState(false)
 
@@ -74,7 +75,7 @@ export default function AddRecommendationPage() {
     setAlreadySent(sent)
   }
 
-  function handleSearch(q) {
+  function handleSearch(q, type = searchType) {
     setQuery(q)
     setSelected(null)
     setProviders(null)
@@ -82,15 +83,26 @@ export default function AddRecommendationPage() {
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const json = await tmdbCall(`?query=${encodeURIComponent(q)}&type=multi`)
+      const json = await tmdbCall(`?query=${encodeURIComponent(q)}&type=${type}`)
       setResults(json.results ?? [])
       setSearching(false)
     }, 400)
   }
 
+  function changeSearchType(t) {
+    setSearchType(t)
+    setResults([])
+    if (query.length >= 2) handleSearch(query, t)
+  }
+
   async function selectTitle(r) {
     setSelected(r)
     setResults([])
+    // Books and albums don't use TMDB watch providers
+    if (r.media_type === 'book' || r.media_type === 'album') {
+      setProviders(null)
+      return
+    }
     setLoadingProviders(true)
     const json = await tmdbCall(`?action=providers&media_type=${r.media_type}&media_id=${r.media_id}`)
     setProviders(json.providers ?? null)
@@ -120,6 +132,7 @@ export default function AddRecommendationPage() {
         media_title:         selected.media_title,
         media_poster_url:    selected.media_poster_url,
         note:                note.trim() || null,
+        media_creator:       selected.media_creator ?? null,
         streaming_providers: providers ?? [],
       }))
     await supabase.from('recommendations').insert(rows)
@@ -138,6 +151,27 @@ export default function AddRecommendationPage() {
 
       {/* Media search */}
       <div className="anim-up space-y-3">
+        {/* Type selector */}
+        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          {[
+            { v: 'multi', l: 'All' },
+            { v: 'movie', l: '🎬 Movies' },
+            { v: 'tv',    l: '📺 TV' },
+            { v: 'book',  l: '📚 Books' },
+            { v: 'album', l: '🎵 Albums' },
+          ].map(t => (
+            <button key={t.v} onClick={() => changeSearchType(t.v)}
+              className="btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
+              style={{
+                background: searchType === t.v ? 'white' : 'rgba(255,255,255,0.1)',
+                border: searchType === t.v ? 'transparent' : '1px solid rgba(255,255,255,0.2)',
+                color: searchType === t.v ? '#6b21a8' : 'rgba(255,255,255,0.6)',
+              }}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+
         <div className="relative">
           <svg className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/>
@@ -147,7 +181,7 @@ export default function AddRecommendationPage() {
             type="text"
             value={query}
             onChange={e => handleSearch(e.target.value)}
-            placeholder="Search movies & TV shows…"
+            placeholder="Search…"
             className="input-glass pl-10"
           />
         </div>
@@ -188,10 +222,14 @@ export default function AddRecommendationPage() {
 
             {loadingProviders ? (
               <p className="text-white/40 text-xs">Checking where to watch…</p>
-            ) : providers ? (
-              <ProviderRows providers={providers} title={selected.media_title} compact />
             ) : (
-              <p className="text-white/30 text-xs">Not available on major streaming platforms</p>
+              <ProviderRows
+                providers={providers}
+                title={selected.media_title}
+                creator={selected.media_creator}
+                mediaType={selected.media_type}
+                compact
+              />
             )}
           </div>
         )}
@@ -261,14 +299,54 @@ export default function AddRecommendationPage() {
         style={{ background: 'white' }}>
         {submitting ? 'Sending…' : sendableCount > 0
           ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`
-          : 'Select a movie & friend'}
+          : 'Select a title & friend'}
       </button>
     </div>
   )
 }
 
 // Shared provider display component — used in AddRec and RecommendationCard
-export function ProviderRows({ providers, title, compact = false, myPlatforms = [] }) {
+export function ProviderRows({ providers, title, creator, mediaType, compact = false, myPlatforms = [] }) {
+  // Books: Bookshop.org + Amazon Books
+  if (mediaType === 'book') {
+    const links = getBookLinks(title, creator)
+    return (
+      <div className={`flex items-center gap-2 flex-wrap ${compact ? '' : 'mt-2'}`}>
+        <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide">Buy</span>
+        <a href={links.bookshop} target="_blank" rel="noopener noreferrer"
+          className="btn-press text-[10px] font-bold px-2.5 py-1 rounded-full text-white border border-white/20 hover:bg-white/20"
+          style={{ background: 'rgba(255,255,255,0.1)' }}>
+          Bookshop.org
+        </a>
+        <a href={links.amazon} target="_blank" rel="noopener noreferrer"
+          className="btn-press text-[10px] font-bold px-2.5 py-1 rounded-full text-white border border-white/20 hover:bg-white/20"
+          style={{ background: 'rgba(255,255,255,0.1)' }}>
+          Amazon Books
+        </a>
+      </div>
+    )
+  }
+
+  // Albums: Spotify + Apple Music
+  if (mediaType === 'album') {
+    const links = getAlbumLinks(title, creator)
+    return (
+      <div className={`flex items-center gap-2 flex-wrap ${compact ? '' : 'mt-2'}`}>
+        <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide">Listen</span>
+        <a href={links.spotify} target="_blank" rel="noopener noreferrer"
+          className="btn-press text-[10px] font-bold px-2.5 py-1 rounded-full text-white border border-white/20 hover:bg-white/20"
+          style={{ background: 'rgba(255,255,255,0.1)' }}>
+          Spotify
+        </a>
+        <a href={links.appleMusic} target="_blank" rel="noopener noreferrer"
+          className="btn-press text-[10px] font-bold px-2.5 py-1 rounded-full text-white border border-white/20 hover:bg-white/20"
+          style={{ background: 'rgba(255,255,255,0.1)' }}>
+          Apple Music
+        </a>
+      </div>
+    )
+  }
+
   if (!providers) return null
 
   // Handle legacy array format (old rows have streaming_providers as array)
