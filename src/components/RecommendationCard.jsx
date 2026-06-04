@@ -8,12 +8,12 @@ const STATUS_LABELS = {
   finished: 'Finished', skipped: 'Skipped', bailed: 'Bailed'
 }
 const STATUS_COLORS = {
-  not_yet_viewed: 'bg-blue-100 text-blue-700',
-  queued: 'bg-indigo-100 text-indigo-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  finished: 'bg-green-100 text-green-700',
-  skipped: 'bg-gray-100 text-gray-500',
-  bailed: 'bg-red-100 text-red-600',
+  not_yet_viewed: 'bg-blue-400/30 text-blue-100',
+  queued:         'bg-purple-400/30 text-purple-100',
+  in_progress:    'bg-amber-400/30 text-amber-100',
+  finished:       'bg-green-400/30 text-green-100',
+  skipped:        'bg-white/10 text-white/50',
+  bailed:         'bg-rose-400/30 text-rose-100',
 }
 
 export default function RecommendationCard({ rec, currentUserId, onStatusChange, onRatingChange, onDelete }) {
@@ -29,65 +29,78 @@ export default function RecommendationCard({ rec, currentUserId, onStatusChange,
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+    <div className="glass rounded-3xl overflow-hidden anim-up">
       <div className="flex gap-3 p-4">
-        {rec.media_poster_url ? (
-          <img
-            src={rec.media_poster_url}
-            alt={rec.media_title}
-            className="w-16 h-24 object-cover rounded-lg shrink-0"
-          />
-        ) : (
-          <div className="w-16 h-24 bg-gray-100 rounded-lg shrink-0 flex items-center justify-center text-gray-300 text-xs">No img</div>
-        )}
+        {/* Poster */}
+        <div className="shrink-0">
+          {rec.media_poster_url ? (
+            <img
+              src={rec.media_poster_url}
+              alt={rec.media_title}
+              className="w-16 h-24 object-cover rounded-2xl shadow-lg"
+            />
+          ) : (
+            <div className="w-16 h-24 rounded-2xl flex items-center justify-center text-white/20 text-2xl"
+              style={{ background: 'rgba(255,255,255,0.1)' }}>
+              🎬
+            </div>
+          )}
+        </div>
 
+        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="font-semibold text-gray-900 text-sm leading-tight">{rec.media_title}</p>
-              <p className="text-xs text-gray-400 mt-0.5 capitalize">{rec.media_type}</p>
+            <div className="min-w-0">
+              <p className="font-bold text-white text-sm leading-tight truncate">{rec.media_title}</p>
+              <p className="text-white/40 text-xs mt-0.5 capitalize">{rec.media_type}</p>
             </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[rec.recipient_status]}`}>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${STATUS_COLORS[rec.recipient_status]}`}>
               {STATUS_LABELS[rec.recipient_status]}
             </span>
           </div>
 
           {rec.note && (
-            <p className="text-xs text-gray-600 mt-2 leading-relaxed italic">"{rec.note}"</p>
+            <p className="text-white/60 text-xs mt-2 leading-relaxed italic line-clamp-2">"{rec.note}"</p>
           )}
 
-          <p className="text-xs text-gray-400 mt-2">
-            from{' '}
-            <Link to={`/profile/${rec.sender_id}`} className="text-indigo-600 hover:underline">
-              {rec.sender?.display_name || rec.sender?.username}
-            </Link>
-            {' · '}
-            {new Date(rec.created_at).toLocaleDateString()}
-          </p>
+          <div className="flex items-center gap-1.5 mt-2">
+            <p className="text-white/40 text-xs">
+              from{' '}
+              <Link to={`/profile/${rec.sender_id}`} className="text-white/70 font-semibold hover:text-white">
+                {rec.sender?.display_name || rec.sender?.username}
+              </Link>
+              {' · '}
+              {new Date(rec.created_at).toLocaleDateString()}
+            </p>
+          </div>
 
           {rec.rating && (
-            <StarRating value={rec.rating} readonly className="mt-1" />
+            <StarDisplay value={rec.rating} className="mt-1.5" />
           )}
         </div>
       </div>
 
-      <div className="border-t border-gray-100 px-4 py-2 flex items-center justify-between gap-2">
+      {/* Actions bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/10">
         <div className="flex items-center gap-2">
           {isRecipient && (
             <div className="relative">
               <button
                 onClick={() => setShowStatusPicker(v => !v)}
-                className="text-xs text-gray-500 hover:text-indigo-600 border border-gray-200 px-2 py-1 rounded-lg"
+                className="btn-press text-xs text-white/60 font-semibold border border-white/20 px-3 py-1.5 rounded-full flex items-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
               >
-                Update status ▾
+                Update ▾
               </button>
               {showStatusPicker && (
-                <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden min-w-36">
+                <div className="absolute left-0 bottom-full mb-2 glass rounded-2xl shadow-2xl z-10 overflow-hidden min-w-36 py-1">
                   {STATUS_OPTIONS.map(s => (
                     <button
                       key={s}
                       onClick={() => handleStatusChange(s)}
-                      className={`block w-full text-left px-3 py-2 text-xs hover:bg-gray-50 ${rec.recipient_status === s ? 'font-semibold text-indigo-600' : 'text-gray-700'}`}
+                      className={`block w-full text-left px-4 py-2 text-xs font-semibold transition-colors hover:bg-white/10 ${
+                        rec.recipient_status === s ? 'text-white' : 'text-white/60'
+                      }`}
                     >
                       {STATUS_LABELS[s]}
                     </button>
@@ -98,24 +111,21 @@ export default function RecommendationCard({ rec, currentUserId, onStatusChange,
           )}
 
           {isRecipient && rec.recipient_status === 'finished' && (
-            <StarRating
-              value={rec.rating}
-              onChange={v => onRatingChange(rec.id, v)}
-            />
+            <StarPicker value={rec.rating} onChange={v => onRatingChange(rec.id, v)} />
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setShowComments(v => !v)}
-            className="text-xs text-gray-400 hover:text-indigo-600"
+            className="btn-press text-white/50 hover:text-white text-xs font-semibold flex items-center gap-1"
           >
             💬 {rec.comments?.length ?? 0}
           </button>
           {isSender && (
             <button
               onClick={() => onDelete(rec.id)}
-              className="text-xs text-gray-300 hover:text-red-400"
+              className="btn-press text-white/30 hover:text-rose-300 text-xs font-semibold"
             >
               Unsend
             </button>
@@ -130,33 +140,29 @@ export default function RecommendationCard({ rec, currentUserId, onStatusChange,
   )
 }
 
-function StarRating({ value, onChange, readonly = false, className = '' }) {
-  const stars = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
-
-  if (readonly) {
-    return (
-      <div className={`flex items-center gap-0.5 ${className}`}>
-        {[1, 2, 3, 4, 5].map(s => (
-          <span key={s} className={`text-sm ${s <= Math.ceil(value) ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
-        ))}
-        <span className="text-xs text-gray-400 ml-1">{value}</span>
-      </div>
-    )
-  }
-
+function StarDisplay({ value, className = '' }) {
   return (
     <div className={`flex items-center gap-0.5 ${className}`}>
-      {[1, 2, 3, 4, 5].map(s => (
+      {[1,2,3,4,5].map(s => (
+        <span key={s} className={`text-xs ${s <= Math.ceil(value) ? 'text-amber-300' : 'text-white/20'}`}>★</span>
+      ))}
+      <span className="text-xs text-white/40 ml-1">{value}</span>
+    </div>
+  )
+}
+
+function StarPicker({ value, onChange }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1,2,3,4,5].map(s => (
         <button
           key={s}
           onClick={() => onChange(s)}
-          onMouseEnter={() => {}}
-          className={`text-base leading-none ${value && s <= value ? 'text-amber-400' : 'text-gray-200'} hover:text-amber-300`}
+          className={`btn-press text-base leading-none ${value && s <= value ? 'text-amber-300' : 'text-white/20'} hover:text-amber-200`}
         >
           ★
         </button>
       ))}
-      {value && <span className="text-xs text-gray-400 ml-1">{value}</span>}
     </div>
   )
 }

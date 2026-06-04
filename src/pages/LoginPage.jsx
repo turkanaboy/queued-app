@@ -21,45 +21,57 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-indigo-600 tracking-tight">Queued</h1>
-          <p className="text-gray-500 mt-2 text-sm">Share what's worth watching.</p>
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-12">
+      {/* Logo */}
+      <div className="anim-scale mb-10 text-center">
+        <div className="w-20 h-20 rounded-[28px] mx-auto mb-4 flex items-center justify-center shadow-2xl"
+          style={{ background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.4)' }}>
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <rect x="6" y="10" width="28" height="4" rx="2" fill="white"/>
+            <rect x="6" y="18" width="20" height="4" rx="2" fill="white" opacity="0.7"/>
+            <rect x="6" y="26" width="24" height="4" rx="2" fill="white" opacity="0.5"/>
+          </svg>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          {sent ? (
-            <div className="text-center py-4">
-              <div className="text-3xl mb-3">📬</div>
-              <p className="font-medium text-gray-800">Check your inbox</p>
-              <p className="text-sm text-gray-500 mt-1">We sent a magic link to <strong>{email}</strong></p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Sending…' : 'Send magic link'}
-              </button>
-            </form>
-          )}
-        </div>
+        <h1 className="text-4xl font-extrabold text-white tracking-tight">Queued</h1>
+        <p className="text-white/60 mt-1 text-sm font-medium">Share what's worth watching.</p>
       </div>
+
+      {/* Card */}
+      <div className="glass w-full max-w-sm rounded-[28px] p-7 anim-up shadow-2xl">
+        {sent ? (
+          <div className="text-center py-4">
+            <div className="text-5xl mb-4">📬</div>
+            <p className="text-xl font-bold text-white">Check your inbox</p>
+            <p className="text-white/60 mt-2 text-sm">We sent a magic link to</p>
+            <p className="text-white font-semibold mt-1">{email}</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Email</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="input-glass"
+              />
+            </div>
+            {error && <p className="text-rose-300 text-sm font-medium">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-purple-900 shadow-lg disabled:opacity-50 transition-all"
+              style={{ background: 'white' }}
+            >
+              {loading ? 'Sending…' : 'Send magic link ✨'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <p className="text-white/30 text-xs mt-8">No password needed. Ever.</p>
     </div>
   )
 }

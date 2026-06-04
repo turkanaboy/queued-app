@@ -71,28 +71,43 @@ export default function FriendsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={e => search(e.target.value)}
-          placeholder="Search by username…"
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+      {/* Header */}
+      <div className="anim-scale">
+        <h1 className="text-3xl font-extrabold text-white">Friends</h1>
+        <p className="text-white/50 text-sm mt-0.5">Find people & see their recommendations</p>
+      </div>
+
+      {/* Search */}
+      <div className="anim-up">
+        <div className="relative">
+          <svg className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/>
+            <path d="m21 21-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => search(e.target.value)}
+            placeholder="Search by username…"
+            className="input-glass pl-10"
+          />
+        </div>
+
         {searchResults.length > 0 && (
-          <div className="mt-2 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="glass rounded-2xl mt-2 overflow-hidden">
             {searchResults.map(u => (
-              <div key={u.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+              <div key={u.id} className="flex items-center justify-between px-4 py-3 border-b border-white/10 last:border-0">
                 <div className="flex items-center gap-3">
                   <InitialsAvatar name={u.display_name || u.username} size="sm" />
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{u.display_name || u.username}</p>
-                    <p className="text-xs text-gray-400">@{u.username}</p>
+                    <p className="text-sm font-bold text-white">{u.display_name || u.username}</p>
+                    <p className="text-xs text-white/50">@{u.username}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => sendRequest(u.id)}
-                  className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700"
+                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-purple-900"
+                  style={{ background: 'white' }}
                 >
                   Add
                 </button>
@@ -102,24 +117,30 @@ export default function FriendsPage() {
         )}
       </div>
 
+      {/* Incoming requests */}
       {incoming.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Requests ({incoming.length})
-          </h2>
-          <div className="space-y-2">
+        <section className="anim-up">
+          <SectionLabel>Requests · {incoming.length}</SectionLabel>
+          <div className="space-y-2 mt-3">
             {incoming.map(f => (
-              <div key={f.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div key={f.id} className="glass rounded-2xl px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
                   <div>
-                    <p className="text-sm font-medium">{f.friend?.display_name || f.friend?.username}</p>
-                    <p className="text-xs text-gray-400">@{f.friend?.username}</p>
+                    <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
+                    <p className="text-xs text-white/50">@{f.friend?.username}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => acceptRequest(f.id)} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700">Accept</button>
-                  <button onClick={() => declineRequest(f.id)} className="text-xs text-gray-500 border border-gray-300 px-3 py-1 rounded-full hover:bg-gray-50">Decline</button>
+                  <button onClick={() => acceptRequest(f.id)}
+                    className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-purple-900"
+                    style={{ background: 'white' }}>
+                    Accept
+                  </button>
+                  <button onClick={() => declineRequest(f.id)}
+                    className="btn-press text-xs font-semibold px-3 py-1.5 rounded-full text-white/70 border border-white/20">
+                    Decline
+                  </button>
                 </div>
               </div>
             ))}
@@ -127,31 +148,35 @@ export default function FriendsPage() {
         </section>
       )}
 
+      {/* Friends list */}
       <section>
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-          Friends {friends.length > 0 && `(${friends.length})`}
-        </h2>
+        <SectionLabel>Friends {friends.length > 0 && `· ${friends.length}`}</SectionLabel>
         {loading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
+          <p className="text-white/40 text-sm mt-3">Loading…</p>
         ) : friends.length === 0 ? (
-          <p className="text-sm text-gray-400">No friends yet — search above to add someone.</p>
+          <div className="glass rounded-2xl p-6 text-center mt-3">
+            <p className="text-3xl mb-2">👋</p>
+            <p className="text-white/60 text-sm">No friends yet — search above to add someone.</p>
+          </div>
         ) : (
-          <div className="space-y-2">
-            {friends.map(f => (
-              <div key={f.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div className="space-y-2 mt-3">
+            {friends.map((f, i) => (
+              <div key={f.id} className={`glass rounded-2xl px-4 py-3 flex items-center justify-between anim-up`}
+                style={{ animationDelay: `${i * 50}ms` }}>
                 <button
                   onClick={() => navigate(`/profile/${f.friend.id}`)}
                   className="flex items-center gap-3 text-left"
                 >
                   <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
                   <div>
-                    <p className="text-sm font-medium">{f.friend?.display_name || f.friend?.username}</p>
-                    <p className="text-xs text-gray-400">@{f.friend?.username}</p>
+                    <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
+                    <p className="text-xs text-white/50">@{f.friend?.username}</p>
                   </div>
                 </button>
                 <button
                   onClick={() => navigate(`/list/${f.friend.id}`)}
-                  className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full hover:bg-indigo-100"
+                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/30 text-white"
+                  style={{ background: 'rgba(255,255,255,0.15)' }}
                 >
                   View list
                 </button>
@@ -161,16 +186,17 @@ export default function FriendsPage() {
         )}
       </section>
 
+      {/* Pending sent */}
       {pending.length > 0 && (
         <section>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Sent requests</h2>
-          <div className="space-y-2">
+          <SectionLabel>Sent requests</SectionLabel>
+          <div className="space-y-2 mt-3">
             {pending.map(f => (
-              <div key={f.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 opacity-60">
+              <div key={f.id} className="glass rounded-2xl px-4 py-3 flex items-center gap-3 opacity-50">
                 <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
                 <div>
-                  <p className="text-sm font-medium">{f.friend?.display_name || f.friend?.username}</p>
-                  <p className="text-xs text-gray-400">Pending</p>
+                  <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
+                  <p className="text-xs text-white/50">Pending…</p>
                 </div>
               </div>
             ))}
@@ -178,5 +204,11 @@ export default function FriendsPage() {
         </section>
       )}
     </div>
+  )
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p className="text-white/50 text-xs font-bold uppercase tracking-widest">{children}</p>
   )
 }

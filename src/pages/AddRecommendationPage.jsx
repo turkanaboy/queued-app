@@ -15,7 +15,7 @@ export default function AddRecommendationPage() {
 
   const [friends, setFriends] = useState([])
   const [selectedFriends, setSelectedFriends] = useState([])
-  const [alreadySent, setAlreadySent] = useState({}) // friendId → true
+  const [alreadySent, setAlreadySent] = useState({})
 
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -63,16 +63,11 @@ export default function AddRecommendationPage() {
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const { data, error } = await supabase.functions.invoke('search-media', {
-        body: null,
-        headers: {},
-        method: 'GET',
-        // Pass as query params via the URL
-      })
-      // Use fetch directly since supabase.functions.invoke doesn't support GET params easily
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?query=${encodeURIComponent(q)}&type=multi`,
-        { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` } }
+        { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
       )
       const json = await res.json()
       setResults(json.results ?? [])
@@ -108,62 +103,79 @@ export default function AddRecommendationPage() {
     navigate('/friends')
   }
 
+  const sendableCount = selectedFriends.filter(f => !alreadySent[f.friend.id]).length
+
   return (
-    <div className="space-y-6 max-w-lg">
-      <h1 className="text-xl font-bold text-gray-900">New recommendation</h1>
+    <div className="space-y-6 pb-4">
+      <div className="anim-scale">
+        <h1 className="text-3xl font-extrabold text-white">New rec</h1>
+        <p className="text-white/50 text-sm mt-0.5">Search for something worth sharing</p>
+      </div>
 
       {/* Media search */}
-      <section className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">Search for a movie or TV show</label>
-        <input
-          type="text"
-          value={query}
-          onChange={e => handleSearch(e.target.value)}
-          placeholder="e.g. The Bear, Dune…"
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        {searching && <p className="text-xs text-gray-400">Searching…</p>}
+      <div className="anim-up space-y-3">
+        <div className="relative">
+          <svg className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/>
+            <path d="m21 21-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            value={query}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Search movies & TV shows…"
+            className="input-glass pl-10"
+          />
+        </div>
+
+        {searching && (
+          <p className="text-white/40 text-xs text-center">Searching…</p>
+        )}
+
         {results.length > 0 && !selected && (
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="glass rounded-2xl overflow-hidden">
             {results.map(r => (
               <button
                 key={r.media_id}
                 onClick={() => { setSelected(r); setResults([]) }}
-                className="flex items-center gap-3 w-full px-4 py-2.5 hover:bg-gray-50 text-left"
+                className="btn-press flex items-center gap-3 w-full px-4 py-3 border-b border-white/10 last:border-0 text-left hover:bg-white/10 transition-colors"
               >
                 {r.media_poster_url
-                  ? <img src={r.media_poster_url} className="w-10 h-14 object-cover rounded shrink-0" alt="" />
-                  : <div className="w-10 h-14 bg-gray-100 rounded shrink-0" />
+                  ? <img src={r.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
+                  : <div className="w-10 h-14 rounded-xl shrink-0 flex items-center justify-center text-xl"
+                      style={{ background: 'rgba(255,255,255,0.1)' }}>🎬</div>
                 }
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{r.media_title}</p>
-                  <p className="text-xs text-gray-400 capitalize">{r.media_type} {r.year && `· ${r.year}`}</p>
+                  <p className="text-sm font-bold text-white">{r.media_title}</p>
+                  <p className="text-xs text-white/40 capitalize">{r.media_type}{r.year ? ` · ${r.year}` : ''}</p>
                 </div>
               </button>
             ))}
           </div>
         )}
+
         {selected && (
-          <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
+          <div className="glass rounded-2xl flex items-center gap-3 px-4 py-3">
             {selected.media_poster_url && (
-              <img src={selected.media_poster_url} className="w-10 h-14 object-cover rounded shrink-0" alt="" />
+              <img src={selected.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
             )}
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">{selected.media_title}</p>
-              <p className="text-xs text-gray-500 capitalize">{selected.media_type} {selected.year && `· ${selected.year}`}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white truncate">{selected.media_title}</p>
+              <p className="text-xs text-white/50 capitalize">{selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
             </div>
-            <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            <button onClick={() => { setSelected(null); setQuery('') }}
+              className="btn-press text-white/40 hover:text-white text-lg p-1">✕</button>
           </div>
         )}
-      </section>
+      </div>
 
       {/* Friend picker */}
-      <section className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">Send to</label>
+      <div className="anim-up space-y-2">
+        <p className="text-white/50 text-xs font-bold uppercase tracking-widest">Send to</p>
         {friends.length === 0 ? (
-          <p className="text-sm text-gray-400">No friends yet.</p>
+          <p className="text-white/40 text-sm">No friends yet.</p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {friends.map(f => {
               const isSelected = !!selectedFriends.find(s => s.friend.id === f.friend.id)
               const isSent = selected && alreadySent[f.friend.id]
@@ -172,52 +184,58 @@ export default function AddRecommendationPage() {
                   key={f.friend.id}
                   onClick={() => !isSent && toggleFriend(f)}
                   disabled={isSent}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-colors text-left ${
-                    isSent
-                      ? 'opacity-40 cursor-not-allowed bg-gray-50 border-gray-200'
-                      : isSelected
-                      ? 'bg-indigo-50 border-indigo-300'
-                      : 'bg-white border-gray-200 hover:border-indigo-300'
+                  className={`btn-press w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+                    isSent ? 'opacity-40 cursor-not-allowed' : ''
                   }`}
+                  style={{
+                    background: isSelected && !isSent ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
+                    border: isSelected && !isSent ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                  }}
                 >
                   <InitialsAvatar name={f.friend.display_name || f.friend.username} size="sm" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{f.friend.display_name || f.friend.username}</p>
-                    {isSent && <p className="text-xs text-gray-400">Already sent</p>}
+                    <p className="text-sm font-bold text-white">{f.friend.display_name || f.friend.username}</p>
+                    {isSent && <p className="text-xs text-white/40">Already sent</p>}
                   </div>
-                  {isSelected && !isSent && <span className="text-indigo-600 text-sm">✓</span>}
+                  {isSelected && !isSent && <span className="text-white font-bold">✓</span>}
                 </button>
               )
             })}
           </div>
         )}
-      </section>
+      </div>
 
       {/* Note */}
-      <section className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Note <span className="text-gray-400">(optional)</span>
-        </label>
+      <div className="anim-up space-y-2">
+        <p className="text-white/50 text-xs font-bold uppercase tracking-widest">
+          Note <span className="text-white/30 normal-case font-medium">(optional)</span>
+        </p>
         <div className="relative">
           <textarea
             value={note}
             onChange={e => setNote(e.target.value.slice(0, 500))}
             rows={3}
             placeholder="Why are you recommending this?"
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            className="input-glass resize-none"
+            style={{ lineHeight: '1.5' }}
           />
-          <span className={`absolute bottom-2 right-3 text-xs ${note.length > 450 ? 'text-amber-500' : 'text-gray-300'}`}>
+          <span className={`absolute bottom-3 right-3 text-xs ${note.length > 450 ? 'text-amber-300' : 'text-white/25'}`}>
             {note.length}/500
           </span>
         </div>
-      </section>
+      </div>
 
       <button
         onClick={handleSubmit}
-        disabled={submitting || !selected || selectedFriends.filter(f => !alreadySent[f.friend.id]).length === 0}
-        className="w-full bg-indigo-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+        disabled={submitting || !selected || sendableCount === 0}
+        className="btn-press w-full py-4 rounded-2xl font-bold text-purple-900 text-sm shadow-xl disabled:opacity-40"
+        style={{ background: 'white' }}
       >
-        {submitting ? 'Sending…' : `Send to ${selectedFriends.filter(f => !alreadySent[f.friend.id]).length || ''} friend${selectedFriends.filter(f => !alreadySent[f.friend.id]).length !== 1 ? 's' : ''}`}
+        {submitting
+          ? 'Sending…'
+          : sendableCount > 0
+          ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`
+          : 'Select a movie & friend'}
       </button>
     </div>
   )

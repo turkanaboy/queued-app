@@ -43,63 +43,64 @@ export default function SetupPage() {
   const usernameValid = /^[a-z0-9_]{3,20}$/.test(username)
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Set up your profile</h1>
-          <p className="text-gray-500 text-sm mt-1">Choose a username to get started</p>
-        </div>
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-12">
+      <div className="anim-scale mb-8 text-center">
+        <h1 className="text-3xl font-extrabold text-white">Set up your profile</h1>
+        <p className="text-white/60 mt-1 text-sm">Choose your username to get started</p>
+      </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={e => checkUsername(e.target.value.toLowerCase())}
-                  placeholder="yourhandle"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {username.length >= 3 && (
-                  <span className="absolute right-3 top-2.5 text-sm">
-                    {checking ? '…' : available ? '✓' : '✗'}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-400 mt-1">3–20 chars, letters/numbers/underscores</p>
-              {username && !usernameValid && (
-                <p className="text-xs text-red-500 mt-1">Invalid format</p>
-              )}
-              {available === false && (
-                <p className="text-xs text-red-500 mt-1">Username taken</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Display name <span className="text-gray-400">(optional)</span></label>
+      <div className="glass w-full max-w-sm rounded-[28px] p-7 anim-up shadow-2xl">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Username</label>
+            <div className="relative">
               <input
                 type="text"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
-                placeholder="Your Name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+                value={username}
+                onChange={e => checkUsername(e.target.value.toLowerCase())}
+                placeholder="yourhandle"
+                className="input-glass pr-10"
               />
+              {username.length >= 3 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg">
+                  {checking ? '⏳' : available ? '✅' : '❌'}
+                </span>
+              )}
             </div>
+            <p className="text-white/40 text-xs mt-1.5">3–20 chars · letters, numbers, underscores</p>
+            {username && !usernameValid && (
+              <p className="text-rose-300 text-xs mt-1">Invalid format</p>
+            )}
+            {available === false && (
+              <p className="text-rose-300 text-xs mt-1">Username taken</p>
+            )}
+          </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div>
+            <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">
+              Display name <span className="text-white/30 normal-case">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              placeholder="Your Name"
+              className="input-glass"
+            />
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading || !available || !usernameValid}
-              className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            >
-              {loading ? 'Saving…' : 'Continue'}
-            </button>
-          </form>
-        </div>
+          {error && <p className="text-rose-300 text-sm">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading || !available || !usernameValid}
+            className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-purple-900 shadow-lg disabled:opacity-40"
+            style={{ background: 'white' }}
+          >
+            {loading ? 'Saving…' : 'Let\'s go 🚀'}
+          </button>
+        </form>
       </div>
     </div>
   )

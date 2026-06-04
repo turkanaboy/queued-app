@@ -19,16 +19,12 @@ export default function SharedListPage() {
   const [friend, setFriend] = useState(null)
   const [recs, setRecs] = useState([])
   const [loading, setLoading] = useState(true)
-
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dirFilter, setDirFilter] = useState('all')
   const [sort, setSort] = useState('recent')
 
-  useEffect(() => {
-    fetchFriend()
-    fetchRecs()
-  }, [friendId, session])
+  useEffect(() => { fetchFriend(); fetchRecs() }, [friendId, session])
 
   async function fetchFriend() {
     const { data } = await supabase.from('users').select('*').eq('id', friendId).single()
@@ -44,8 +40,9 @@ export default function SharedListPage() {
       .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
       .is('deleted_at', null)
 
-    if (sort === 'recent') q = q.order('created_at', { ascending: false })
-    else q = q.order('rating', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false })
+    q = sort === 'recent'
+      ? q.order('created_at', { ascending: false })
+      : q.order('rating', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false })
 
     const { data } = await q
     setRecs(data ?? [])
@@ -78,54 +75,53 @@ export default function SharedListPage() {
 
   return (
     <div className="space-y-5">
+      {/* Friend header */}
       {friend && (
-        <div className="flex items-center gap-3">
+        <div className="anim-scale flex items-center justify-between">
           <button onClick={() => navigate(`/profile/${friend.id}`)} className="flex items-center gap-3">
             <InitialsAvatar name={friend.display_name || friend.username} size="md" />
             <div className="text-left">
-              <p className="font-semibold text-gray-900">{friend.display_name || friend.username}</p>
-              <p className="text-xs text-gray-400">@{friend.username}</p>
+              <p className="font-extrabold text-white text-lg">{friend.display_name || friend.username}</p>
+              <p className="text-white/50 text-xs">@{friend.username}</p>
             </div>
+          </button>
+          <button
+            onClick={() => navigate(-1)}
+            className="btn-press text-white/50 hover:text-white p-2"
+          >
+            ←
           </button>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="space-y-2">
-        <FilterPills
-          label="Type"
-          options={[{ value: 'all', label: 'All' }, { value: 'movie', label: 'Movie' }, { value: 'tv', label: 'TV' }]}
-          value={typeFilter}
-          onChange={setTypeFilter}
+      {/* Filter pills */}
+      <div className="space-y-2 anim-up">
+        <FilterRow
+          options={[{ value: 'all', label: 'All' }, { value: 'movie', label: '🎬 Movie' }, { value: 'tv', label: '📺 TV' }]}
+          value={typeFilter} onChange={setTypeFilter}
         />
-        <FilterPills
-          label="Status"
+        <FilterRow
           options={STATUS_OPTIONS.map(s => ({ value: s, label: STATUS_LABELS[s] }))}
-          value={statusFilter}
-          onChange={setStatusFilter}
+          value={statusFilter} onChange={setStatusFilter}
         />
-        <FilterPills
-          label="Direction"
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'from_me', label: 'From me' },
-            { value: 'from_them', label: 'From them' },
-          ]}
-          value={dirFilter}
-          onChange={setDirFilter}
+        <FilterRow
+          options={[{ value: 'all', label: 'All' }, { value: 'from_me', label: 'From me' }, { value: 'from_them', label: 'From them' }]}
+          value={dirFilter} onChange={setDirFilter}
         />
-        <FilterPills
-          label="Sort"
-          options={[{ value: 'recent', label: 'Recent' }, { value: 'top', label: 'Top rated' }]}
-          value={sort}
-          onChange={v => { setSort(v); fetchRecs() }}
+        <FilterRow
+          options={[{ value: 'recent', label: '🕐 Recent' }, { value: 'top', label: '⭐ Top rated' }]}
+          value={sort} onChange={v => { setSort(v); fetchRecs() }}
         />
       </div>
 
+      {/* List */}
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-white/40 text-sm">Loading…</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">Nothing here yet.</p>
+        <div className="glass rounded-3xl p-8 text-center">
+          <p className="text-4xl mb-3">🎬</p>
+          <p className="text-white/50 text-sm">Nothing here yet.</p>
+        </div>
       ) : (
         <div className="space-y-3">
           {filtered.map(rec => (
@@ -144,19 +140,19 @@ export default function SharedListPage() {
   )
 }
 
-function FilterPills({ label, options, value, onChange }) {
+function FilterRow({ options, value, onChange }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-gray-400 w-16 shrink-0">{label}</span>
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
       {options.map(o => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+          className={`btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
             value === o.value
-              ? 'bg-indigo-600 text-white border-indigo-600'
-              : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-300'
+              ? 'text-purple-900 border-transparent'
+              : 'text-white/60 border-white/20 hover:border-white/40'
           }`}
+          style={value === o.value ? { background: 'white' } : { background: 'rgba(255,255,255,0.1)' }}
         >
           {o.label}
         </button>
