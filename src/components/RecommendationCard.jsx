@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import CommentsDrawer from './CommentsDrawer'
+import { ProviderRows } from '../pages/AddRecommendationPage'
 
 const STATUS_OPTIONS = ['not_yet_viewed', 'queued', 'in_progress', 'finished', 'skipped', 'bailed']
 const STATUS_LABELS = {
@@ -22,7 +23,6 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
   const isRecipient = rec.recipient_id === currentUserId
   const isSender    = rec.sender_id === currentUserId
 
-  const providers = rec.streaming_providers ?? []
   const myProviderIds = myPlatforms ?? []
 
   async function handleStatusChange(status) {
@@ -71,32 +71,14 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
 
           {rec.rating && <StarDisplay value={rec.rating} className="mt-1.5" />}
 
-          {/* Streaming providers */}
-          {providers.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {providers.map(p => {
-                const haveIt = myProviderIds.includes(p.provider_id)
-                return (
-                  <div key={p.provider_id} className="relative" title={`${p.provider_name}${haveIt ? ' (you have this)' : ''}`}>
-                    {p.logo_path ? (
-                      <img src={p.logo_path} alt={p.provider_name}
-                        className="w-6 h-6 rounded-md object-cover"
-                        style={{ opacity: myProviderIds.length > 0 ? (haveIt ? 1 : 0.25) : 0.7 }} />
-                    ) : (
-                      <span className="text-[10px] text-white/50 px-1.5 py-0.5 rounded"
-                        style={{ background: 'rgba(255,255,255,0.1)', opacity: haveIt ? 1 : 0.3 }}>
-                        {p.provider_name}
-                      </span>
-                    )}
-                    {haveIt && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border border-white/20 flex items-center justify-center text-[8px]">✓</span>
-                    )}
-                  </div>
-                )
-              })}
-              {myProviderIds.length > 0 && providers.some(p => myProviderIds.includes(p.provider_id)) && (
-                <span className="text-green-300 text-[10px] font-semibold ml-1">You have it ✓</span>
-              )}
+          {/* Streaming providers — rent / buy / stream with affiliate links */}
+          {rec.streaming_providers && (
+            <div className="mt-2">
+              <ProviderRows
+                providers={rec.streaming_providers}
+                title={rec.media_title}
+                myPlatforms={myProviderIds}
+              />
             </div>
           )}
         </div>

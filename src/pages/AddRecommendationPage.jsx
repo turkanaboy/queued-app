@@ -3,14 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
+import { getProviderLink, getJustWatchLink } from '../lib/affiliates'
 
-async function tmdbCall(path, session) {
+async function tmdbCall(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   const res = await fetch(
     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`,
     { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
   )
   return res.json()
+}
+
+// providers is now { flatrate, rent, buy, link } — handle legacy array format too
+function getFlatrate(providers) {
+  if (!providers) return []
+  return Array.isArray(providers) ? providers : (providers.flatrate ?? [])
 }
 
 export default function AddRecommendationPage() {
@@ -20,7 +27,7 @@ export default function AddRecommendationPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
-  const [providers, setProviders] = useState([])
+  const [providers, setProviders] = useState(null) // { flatrate, rent, buy, link }
   const [searching, setSearching] = useState(false)
   const [loadingProviders, setLoadingProviders] = useState(false)
 
@@ -70,7 +77,7 @@ export default function AddRecommendationPage() {
   function handleSearch(q) {
     setQuery(q)
     setSelected(null)
-    setProviders([])
+    setProviders(null)
     clearTimeout(debounceRef.current)
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
@@ -86,7 +93,7 @@ export default function AddRecommendationPage() {
     setResults([])
     setLoadingProviders(true)
     const json = await tmdbCall(`?action=providers&media_type=${r.media_type}&media_id=${r.media_id}`)
-    setProviders(json.providers ?? [])
+    setProviders(json.providers ?? null)
     setLoadingProviders(false)
   }
 
@@ -106,20 +113,21 @@ export default function AddRecommendationPage() {
     const rows = selectedFriends
       .filter(f => !alreadySent[f.friend.id])
       .map(f => ({
-        sender_id: uid,
-        recipient_id: f.friend.id,
-        media_type: selected.media_type,
-        media_id: selected.media_id,
-        media_title: selected.media_title,
-        media_poster_url: selected.media_poster_url,
-        note: note.trim() || null,
-        streaming_providers: providers,
+        sender_id:           uid,
+        recipient_id:        f.friend.id,
+        media_type:          selected.media_type,
+        media_id:            selected.media_id,
+        media_title:         selected.media_title,
+        media_poster_url:    selected.media_poster_url,
+        note:                note.trim() || null,
+        streaming_providers: providers ?? [],
       }))
     await supabase.from('recommendations').insert(rows)
     navigate('/friends')
   }
 
   const sendableCount = selectedFriends.filter(f => !alreadySent[f.friend.id]).length
+  const flatrate = getFlatrate(providers)
 
   return (
     <div className="space-y-6 pb-4">
@@ -149,11 +157,8 @@ export default function AddRecommendationPage() {
         {results.length > 0 && !selected && (
           <div className="glass rounded-2xl overflow-hidden">
             {results.map(r => (
-              <button
-                key={r.media_id}
-                onClick={() => selectTitle(r)}
-                className="btn-press flex items-center gap-3 w-full px-4 py-3 border-b border-white/10 last:border-0 text-left hover:bg-white/10 transition-colors"
-              >
+              <button key={r.media_id} onClick={() => selectTitle(r)}
+                className="btn-press flex items-center gap-3 w-full px-4 py-3 border-b border-white/10 last:border-0 text-left hover:bg-white/10 transition-colors">
                 {r.media_poster_url
                   ? <img src={r.media_poster_url} className="w-10 h-14 object-cover rounded-xl shrink-0" alt="" />
                   : <div className="w-10 h-14 rounded-xl shrink-0 flex items-center justify-center text-xl" style={{ background: 'rgba(255,255,255,0.1)' }}>🎬</div>
@@ -177,24 +182,16 @@ export default function AddRecommendationPage() {
                 <p className="text-sm font-bold text-white truncate">{selected.media_title}</p>
                 <p className="text-xs text-white/50 capitalize">{selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
               </div>
-              <button onClick={() => { setSelected(null); setQuery(''); setProviders([]) }}
+              <button onClick={() => { setSelected(null); setQuery(''); setProviders(null) }}
                 className="btn-press text-white/40 hover:text-white text-lg p-1">✕</button>
             </div>
 
-            {/* Streaming providers */}
             {loadingProviders ? (
               <p className="text-white/40 text-xs">Checking where to watch…</p>
-            ) : providers.length > 0 ? (
-              <div>
-                <p className="text-white/50 text-xs mb-1.5">Streaming on</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {providers.map(p => (
-                    <ProviderBadge key={p.provider_id} provider={p} />
-                  ))}
-                </div>
-              </div>
+            ) : providers ? (
+              <ProviderRows providers={providers} title={selected.media_title} compact />
             ) : (
-              <p className="text-white/30 text-xs">Not on major streaming platforms</p>
+              <p className="text-white/30 text-xs">Not available on major streaming platforms</p>
             )}
           </div>
         )}
@@ -210,20 +207,15 @@ export default function AddRecommendationPage() {
             {friends.map(f => {
               const isSelected = !!selectedFriends.find(s => s.friend.id === f.friend.id)
               const isSent = selected && alreadySent[f.friend.id]
-              // Check platform compatibility
               const friendPlatforms = f.friend.platforms ?? []
-              const compatible = providers.filter(p => friendPlatforms.includes(p.provider_id))
+              const compatible = flatrate.filter(p => friendPlatforms.includes(p.provider_id))
               return (
-                <button
-                  key={f.friend.id}
-                  onClick={() => !isSent && toggleFriend(f)}
-                  disabled={isSent}
+                <button key={f.friend.id} onClick={() => !isSent && toggleFriend(f)} disabled={isSent}
                   className={`btn-press w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${isSent ? 'opacity-40 cursor-not-allowed' : ''}`}
                   style={{
                     background: isSelected && !isSent ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
                     border: isSelected && !isSent ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.15)',
-                  }}
-                >
+                  }}>
                   <InitialsAvatar name={f.friend.display_name || f.friend.username} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white">{f.friend.display_name || f.friend.username}</p>
@@ -231,7 +223,7 @@ export default function AddRecommendationPage() {
                     {!isSent && compatible.length > 0 && (
                       <p className="text-xs text-green-300 font-semibold">✓ On their {compatible.map(p => p.provider_name).join(', ')}</p>
                     )}
-                    {!isSent && selected && providers.length > 0 && compatible.length === 0 && friendPlatforms.length > 0 && (
+                    {!isSent && selected && flatrate.length > 0 && compatible.length === 0 && friendPlatforms.length > 0 && (
                       <p className="text-xs text-white/30">Not on their platforms</p>
                     )}
                   </div>
@@ -263,12 +255,10 @@ export default function AddRecommendationPage() {
         </div>
       </div>
 
-      <button
-        onClick={handleSubmit}
+      <button onClick={handleSubmit}
         disabled={submitting || !selected || sendableCount === 0}
         className="btn-press w-full py-4 rounded-2xl font-bold text-purple-900 text-sm shadow-xl disabled:opacity-40"
-        style={{ background: 'white' }}
-      >
+        style={{ background: 'white' }}>
         {submitting ? 'Sending…' : sendableCount > 0
           ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`
           : 'Select a movie & friend'}
@@ -277,19 +267,93 @@ export default function AddRecommendationPage() {
   )
 }
 
-function ProviderBadge({ provider, dimmed = false }) {
-  return provider.logo_path ? (
-    <img
-      src={provider.logo_path}
-      alt={provider.provider_name}
-      title={provider.provider_name}
-      className="w-8 h-8 rounded-lg object-cover shadow"
-      style={{ opacity: dimmed ? 0.3 : 1 }}
-    />
+// Shared provider display component — used in AddRec and RecommendationCard
+export function ProviderRows({ providers, title, compact = false, myPlatforms = [] }) {
+  if (!providers) return null
+
+  // Handle legacy array format (old rows have streaming_providers as array)
+  if (Array.isArray(providers)) {
+    if (providers.length === 0) return null
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {providers.map(p => (
+          <ProviderLogo key={p.provider_id} provider={p} title={title} link={null}
+            owned={myPlatforms.includes(p.provider_id)} hasOwnership={myPlatforms.length > 0} />
+        ))}
+      </div>
+    )
+  }
+
+  const { flatrate = [], rent = [], buy = [], link: jwLink } = providers
+  const hasAny = flatrate.length > 0 || rent.length > 0 || buy.length > 0
+
+  if (!hasAny) {
+    return jwLink
+      ? <a href={jwLink} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-white/40 hover:text-white/70 underline">Find where to watch →</a>
+      : <p className="text-white/30 text-xs">Not on major platforms</p>
+  }
+
+  return (
+    <div className={`space-y-1.5 ${compact ? '' : 'mt-2'}`}>
+      {flatrate.length > 0 && (
+        <ProviderSection label="Stream" providers={flatrate} title={title} jwLink={jwLink}
+          myPlatforms={myPlatforms} isStream />
+      )}
+      {rent.length > 0 && (
+        <ProviderSection label="Rent" providers={rent} title={title} jwLink={jwLink} />
+      )}
+      {buy.length > 0 && (
+        <ProviderSection label="Buy" providers={buy} title={title} jwLink={jwLink} />
+      )}
+      {jwLink && (
+        <a href={jwLink} target="_blank" rel="noopener noreferrer"
+          className="inline-block text-[10px] text-white/30 hover:text-white/60 mt-0.5">
+          All options on JustWatch →
+        </a>
+      )}
+    </div>
+  )
+}
+
+function ProviderSection({ label, providers, title, jwLink, myPlatforms = [], isStream = false }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide w-8 shrink-0">{label}</span>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {providers.map(p => (
+          <ProviderLogo key={p.provider_id} provider={p} title={title} link={getProviderLink(p, title, jwLink)}
+            owned={isStream && myPlatforms.includes(p.provider_id)}
+            hasOwnership={isStream && myPlatforms.length > 0} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProviderLogo({ provider, title, link, owned, hasOwnership }) {
+  const img = provider.logo_path ? (
+    <img src={provider.logo_path} alt={provider.provider_name} title={provider.provider_name}
+      className="w-7 h-7 rounded-lg object-cover shadow"
+      style={{ opacity: hasOwnership ? (owned ? 1 : 0.25) : 0.8 }} />
   ) : (
-    <span className="text-xs text-white/60 px-2 py-1 rounded-lg"
-      style={{ background: 'rgba(255,255,255,0.15)', opacity: dimmed ? 0.4 : 1 }}>
+    <span className="text-[10px] text-white/60 px-1.5 py-1 rounded-lg"
+      style={{ background: 'rgba(255,255,255,0.15)' }}>
       {provider.provider_name}
     </span>
+  )
+
+  if (!link) return (
+    <div className="relative">
+      {img}
+      {owned && <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border border-black/20 text-[7px] flex items-center justify-center text-white">✓</span>}
+    </div>
+  )
+
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer" className="btn-press relative block">
+      {img}
+      {owned && <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border border-black/20 text-[7px] flex items-center justify-center text-white">✓</span>}
+    </a>
   )
 }
