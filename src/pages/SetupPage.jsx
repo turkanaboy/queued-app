@@ -49,6 +49,22 @@ export default function SetupPage() {
     })
     if (error) { setError(error.message); setLoading(false); return }
     await refreshProfile()
+
+    // Fire bot recommendations in the background — don't await so it doesn't block navigation
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ user_id: session.user.id }),
+      }
+    ).catch(() => {}) // Silently ignore errors — bot is best-effort
+
     navigate('/friends')
   }
 
