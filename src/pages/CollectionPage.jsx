@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
@@ -22,15 +22,10 @@ async function fetchTrending(mediaType, page = 1) {
 export default function CollectionPage() {
   const { session } = useAuth()
 
-  // Separate state per media type
   const [items, setItems] = useState({ movie: [], tv: [], book: [], album: [] })
   const [pages, setPages] = useState({ movie: 1, tv: 1, book: 1, album: 1 })
   const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
-
-  // User's existing log entries (media_id → entry) for overlay display
   const [logMap, setLogMap] = useState({})
-
-  // Rating modal
   const [ratingItem, setRatingItem] = useState(null)
 
   useEffect(() => {
@@ -63,17 +58,27 @@ export default function CollectionPage() {
   }
 
   async function refresh(mediaType) {
-    // Rotate to a random page (1-5) different from current
     const next = pages[mediaType] >= 5 ? 1 : pages[mediaType] + 1
     loadSection(mediaType, next)
   }
 
-  function openRating(item) {
-    setRatingItem(item)
+  async function handleQueue(item) {
+    // Save to personal log with no rating (want to watch)
+    await supabase.from('user_media_log').upsert({
+      user_id:          session.user.id,
+      media_type:       item.media_type,
+      media_id:         item.media_id,
+      media_title:      item.media_title,
+      media_creator:    item.media_creator ?? null,
+      media_poster_url: item.media_poster_url,
+      rating:           null,
+      source_type:      'self',
+    }, { onConflict: 'user_id,media_id' })
+    fetchUserLog()
   }
 
   function handleSaved() {
-    fetchUserLog() // refresh overlay data
+    fetchUserLog()
   }
 
   return (
@@ -99,8 +104,8 @@ export default function CollectionPage() {
 
           {loading[key] && items[key].length === 0 ? (
             <div className="flex gap-3 overflow-hidden">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className={`shrink-0 rounded-2xl animate-pulse ${square ? 'w-[110px] h-[110px]' : 'w-[100px] h-[150px]'}`}
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className={`shrink-0 rounded-2xl animate-pulse ${square ? 'w-[130px] h-[130px]' : 'w-[130px] h-[195px]'}`}
                   style={{ background: 'rgba(255,255,255,0.1)' }} />
               ))}
             </div>
@@ -114,7 +119,8 @@ export default function CollectionPage() {
                     item={item}
                     logEntry={logged}
                     square={square}
-                    onTap={() => openRating(item)}
+                    onTap={() => setRatingItem(item)}
+                    onQueue={() => handleQueue(item)}
                   />
                 )
               })}
@@ -124,7 +130,7 @@ export default function CollectionPage() {
                 <button
                   onClick={() => loadSection(key, pages[key] + 1)}
                   disabled={loading[key]}
-                  className={`btn-press shrink-0 rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30 ${square ? 'w-[110px] h-[110px]' : 'w-[100px] h-[150px]'}`}
+                  className={`btn-press shrink-0 rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30 ${square ? 'w-[130px] h-[130px]' : 'w-[130px] h-[195px]'}`}
                   style={{ background: 'rgba(255,255,255,0.08)' }}
                 >
                   <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
@@ -136,7 +142,6 @@ export default function CollectionPage() {
         </section>
       ))}
 
-      {/* Rating modal */}
       {ratingItem && (
         <RatingModal
           item={ratingItem}
@@ -149,9 +154,10 @@ export default function CollectionPage() {
   )
 }
 
-function PosterCard({ item, logEntry, square = false, onTap }) {
-  const w = square ? 'w-[110px]' : 'w-[100px]'
-  const h = square ? 'h-[110px]' : 'h-[150px]'
+function PosterCard({ item, logEntry, square = false, onTap, onQueue }) {
+  const w = square ? 'w-[130px]' : 'w-[130px]'
+  const h = square ? 'h-[130px]' : 'h-[195px]'
+  const isQueued = logEntry && !logEntry.rating
 
   return (
     <button
@@ -166,7 +172,7 @@ function PosterCard({ item, logEntry, square = false, onTap }) {
         />
 
         {/* Rated overlay */}
-        {logEntry ? (
+        {logEntry && logEntry.rating ? (
           <div className="absolute inset-0 flex flex-col justify-end"
             style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}>
             <div className="px-2 pb-2">
@@ -180,28 +186,40 @@ function PosterCard({ item, logEntry, square = false, onTap }) {
             </div>
           </div>
         ) : (
-          /* Hover prompt */
+          /* Hover/tap prompt */
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
             style={{ background: 'rgba(0,0,0,0.5)' }}>
             <span className="text-white text-2xl">★</span>
           </div>
         )}
 
-        {/* Checkmark badge for rated */}
+        {/* Status badge: green check = rated, bookmark = queued */}
         {logEntry && (
-          <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-green-400 flex items-center justify-center shadow">
-            <span className="text-white text-[9px] font-bold">✓</span>
+          <div className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center shadow text-[9px] font-bold ${isQueued ? 'bg-sky-400 text-white' : 'bg-green-400 text-white'}`}>
+            {isQueued ? '🔖' : '✓'}
           </div>
+        )}
+
+        {/* Add to queue button — only shown when not yet logged */}
+        {!logEntry && (
+          <button
+            onClick={e => { e.stopPropagation(); onQueue() }}
+            className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity btn-press"
+            style={{ background: 'rgba(0,0,0,0.7)', fontSize: '0.75rem' }}
+            title="Add to queue"
+          >
+            🔖
+          </button>
         )}
       </div>
 
-      <p className="text-white/70 text-[10px] font-semibold mt-1.5 leading-tight line-clamp-2">
+      <p className="text-white/70 text-[11px] font-semibold mt-1.5 leading-tight line-clamp-2">
         {item.media_title}
       </p>
       {item.media_creator && (
-        <p className="text-white/40 text-[9px] mt-0.5 truncate">{item.media_creator}</p>
+        <p className="text-white/40 text-[10px] mt-0.5 truncate">{item.media_creator}</p>
       )}
-      {item.year && <p className="text-white/30 text-[9px] mt-0.5">{item.year}</p>}
+      {item.year && <p className="text-white/30 text-[10px] mt-0.5">{item.year}</p>}
     </button>
   )
 }

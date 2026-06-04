@@ -74,7 +74,7 @@ export default function CommentsDrawer({ recommendationId, currentUserId }) {
         <button
           type="submit"
           disabled={submitting || !body.trim()}
-          className="btn-press text-xs font-bold px-3 py-2 rounded-xl disabled:opacity-40 text-purple-900"
+          className="btn-press text-xs font-bold px-3 py-2 rounded-xl disabled:opacity-40 text-[#040C21]"
           style={{ background: 'white' }}
         >
           Post

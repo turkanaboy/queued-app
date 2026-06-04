@@ -62,7 +62,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-purple-900 shadow-lg disabled:opacity-50 transition-all"
+              className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-[#040C21] shadow-lg disabled:opacity-50 transition-all"
               style={{ background: 'white' }}
             >
               {loading ? 'Sending…' : 'Send magic link ✨'}

@@ -165,7 +165,7 @@ export default function AddRecommendationPage() {
               style={{
                 background: searchType === t.v ? 'white' : 'rgba(255,255,255,0.1)',
                 border: searchType === t.v ? 'transparent' : '1px solid rgba(255,255,255,0.2)',
-                color: searchType === t.v ? '#6b21a8' : 'rgba(255,255,255,0.6)',
+                color: searchType === t.v ? '#040C21' : 'rgba(255,255,255,0.6)',
               }}>
               {t.l}
             </button>
@@ -295,7 +295,7 @@ export default function AddRecommendationPage() {
 
       <button onClick={handleSubmit}
         disabled={submitting || !selected || sendableCount === 0}
-        className="btn-press w-full py-4 rounded-2xl font-bold text-purple-900 text-sm shadow-xl disabled:opacity-40"
+        className="btn-press w-full py-4 rounded-2xl font-bold text-[#040C21] text-sm shadow-xl disabled:opacity-40"
         style={{ background: 'white' }}>
         {submitting ? 'Sending…' : sendableCount > 0
           ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`

@@ -10,7 +10,7 @@ const STATUS_LABELS = {
 }
 const STATUS_COLORS = {
   not_yet_viewed: 'bg-blue-400/30 text-blue-100',
-  queued:         'bg-purple-400/30 text-purple-100',
+  queued:         'bg-sky-400/30 text-sky-100',
   in_progress:    'bg-amber-400/30 text-amber-100',
   finished:       'bg-green-400/30 text-green-100',
   skipped:        'bg-white/10 text-white/50',
@@ -74,7 +74,7 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
 
           {rec.rating && <StarDisplay value={rec.rating} className="mt-1.5" />}
 
-          {/* Streaming / buy / listen links with affiliate support */}
+          {/* Streaming / buy / listen links */}
           <div className="mt-2">
             <ProviderRows
               providers={rec.streaming_providers}
@@ -135,21 +135,35 @@ export default function RecommendationCard({ rec, currentUserId, myPlatforms = [
   )
 }
 
-function StarDisplay({ value, className = '' }) {
+// Shows a read-only star rating with proper half-star rendering
+export function StarDisplay({ value, className = '' }) {
   return (
     <div className={`flex items-center gap-0.5 ${className}`}>
-      {[1,2,3,4,5].map(s => (
-        <span key={s} className={`text-xs ${s <= Math.ceil(value) ? 'text-amber-300' : 'text-white/20'}`}>★</span>
-      ))}
+      {[1, 2, 3, 4, 5].map(s => {
+        const filled = value >= s
+        const half   = !filled && value >= s - 0.5
+        return (
+          <span key={s} className="relative text-xs leading-none" style={{ display: 'inline-block', width: '0.7rem' }}>
+            <span className="text-white/20">★</span>
+            {(filled || half) && (
+              <span
+                className="absolute inset-0 text-amber-300"
+                style={half ? { clipPath: 'inset(0 50% 0 0)' } : {}}
+              >★</span>
+            )}
+          </span>
+        )
+      })}
       <span className="text-xs text-white/40 ml-1">{value}</span>
     </div>
   )
 }
 
+// Whole-star picker used on finished recommendations
 function StarPicker({ value, onChange }) {
   return (
     <div className="flex items-center gap-0.5">
-      {[1,2,3,4,5].map(s => (
+      {[1, 2, 3, 4, 5].map(s => (
         <button key={s} onClick={() => onChange(s)}
           className={`btn-press text-base leading-none ${value && s <= value ? 'text-amber-300' : 'text-white/20'} hover:text-amber-200`}>
           ★

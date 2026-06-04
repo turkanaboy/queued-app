@@ -106,7 +106,7 @@ export default function FriendsPage() {
                 </div>
                 <button
                   onClick={() => sendRequest(u.id)}
-                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-purple-900"
+                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-[#040C21]"
                   style={{ background: 'white' }}
                 >
                   Add
@@ -133,7 +133,7 @@ export default function FriendsPage() {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => acceptRequest(f.id)}
-                    className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-purple-900"
+                    className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-[#040C21]"
                     style={{ background: 'white' }}>
                     Accept
                   </button>

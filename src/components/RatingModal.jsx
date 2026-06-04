@@ -7,7 +7,7 @@ const TYPE_ICON = { movie: '🎬', tv: '📺', book: '📚', album: '🎵' }
 export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   const { session } = useAuth()
   const [rating, setRating] = useState(existingEntry?.rating ?? null)
-  const [step, setStep] = useState('rate') // 'rate' | 'comment'
+  const [step, setStep] = useState('rate')
   const [comment, setComment] = useState(existingEntry?.review ?? '')
   const [saving, setSaving] = useState(false)
 
@@ -24,13 +24,14 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
       media_creator:    item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
       rating,
-      review: withComment && comment.trim() ? comment.trim() : null,
+      // When skipping, preserve any existing review rather than wiping it
+      review: withComment
+        ? (comment.trim() || null)
+        : (existingEntry?.review ?? null),
     }, { onConflict: 'user_id,media_id' })
     onSaved?.()
     onClose()
   }
-
-  const HALF_STARS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
 
   return (
     <>
@@ -38,7 +39,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
 
       <div className="fixed inset-0 z-40 flex items-end justify-center pointer-events-none">
         <div className="pointer-events-auto w-full max-w-[430px] rounded-t-[32px] shadow-2xl pb-8"
-          style={{ background: 'linear-gradient(170deg, #ff6b35 0%, #e91e8c 50%, #6b21a8 100%)' }}>
+          style={{ background: 'linear-gradient(170deg, #0A1847 0%, #1747D0 55%, #0369A1 100%)' }}>
 
           <div className="pt-4 pb-2 flex justify-center">
             <div className="w-10 h-1 bg-white/30 rounded-full" />
@@ -71,20 +72,44 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
               <button onClick={onClose} className="btn-press text-white/40 hover:text-white ml-auto shrink-0 p-1 text-xl">✕</button>
             </div>
 
-            {/* Star rating */}
+            {/* Star rating — 5 stars with left/right click zones for half-star precision */}
             <div>
               <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Your rating</p>
               <div className="flex items-center justify-center gap-1">
-                {HALF_STARS.map(v => {
-                  const isWhole = v % 1 === 0
-                  const filled  = rating !== null && v <= rating
+                {[1, 2, 3, 4, 5].map(star => {
+                  const halfVal = star - 0.5
+                  const isFull = rating !== null && rating >= star
+                  const isHalf = rating !== null && !isFull && rating >= halfVal
                   return (
-                    <button key={v} onClick={() => setRating(v === rating ? null : v)}
-                      className={`btn-press text-3xl leading-none transition-all ${
-                        filled ? 'text-amber-300 scale-110' : 'text-white/20 hover:text-white/40'
-                      }`}>
-                      {isWhole ? '★' : '⯨'}
-                    </button>
+                    <div
+                      key={star}
+                      className="relative select-none"
+                      style={{ fontSize: '2.4rem', lineHeight: 1, width: '2.6rem', height: '2.6rem' }}
+                    >
+                      {/* Empty base */}
+                      <span className="absolute inset-0 flex items-center justify-center text-white/20 pointer-events-none">
+                        ★
+                      </span>
+                      {/* Amber fill — clipped to left half when half-star */}
+                      {(isFull || isHalf) && (
+                        <span
+                          className="absolute inset-0 flex items-center justify-center text-amber-300 pointer-events-none"
+                          style={isHalf ? { clipPath: 'inset(0 50% 0 0)' } : {}}
+                        >
+                          ★
+                        </span>
+                      )}
+                      {/* Left half click → half value */}
+                      <button
+                        className="absolute left-0 top-0 w-1/2 h-full btn-press"
+                        onClick={() => setRating(halfVal === rating ? null : halfVal)}
+                      />
+                      {/* Right half click → full value */}
+                      <button
+                        className="absolute right-0 top-0 w-1/2 h-full btn-press"
+                        onClick={() => setRating(star === rating ? null : star)}
+                      />
+                    </div>
                   )
                 })}
               </div>
@@ -97,7 +122,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
             {step === 'rate' && rating && (
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setStep('comment')}
-                  className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-purple-900"
+                  className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21]"
                   style={{ background: 'white' }}>
                   Add a comment
                 </button>
@@ -123,7 +148,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => save(true)} disabled={saving}
-                    className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-purple-900 disabled:opacity-40"
+                    className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
                     style={{ background: 'white' }}>
                     {saving ? 'Saving…' : 'Save to my collection 📝'}
                   </button>
@@ -137,7 +162,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
             )}
 
             {!rating && (
-              <p className="text-center text-white/30 text-sm pb-2">Select a rating to continue</p>
+              <p className="text-center text-white/30 text-sm pb-2">Tap left half of a star for ½, right half for full</p>
             )}
           </div>
         </div>

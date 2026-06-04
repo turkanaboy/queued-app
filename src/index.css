@@ -5,7 +5,7 @@
 body {
   font-family: 'Plus Jakarta Sans', sans-serif;
   min-height: 100dvh;
-  background: linear-gradient(145deg, #ff6b35 0%, #e91e8c 45%, #6b21a8 100%);
+  background: linear-gradient(145deg, #040C21 0%, #1747D0 52%, #0EA5E9 100%);
   background-attachment: fixed;
   overscroll-behavior: none;
 }
@@ -40,7 +40,7 @@ body {
 
 /* Gradient ring for avatars */
 .avatar-ring {
-  background: linear-gradient(135deg, #ff6b35, #e91e8c, #6b21a8);
+  background: linear-gradient(135deg, #1747D0, #0EA5E9, #93C5FD);
   padding: 3px;
   border-radius: 9999px;
 }
@@ -78,7 +78,7 @@ body {
 
 /* Gradient text */
 .grad-text {
-  background: linear-gradient(135deg, #ff6b35, #e91e8c);
+  background: linear-gradient(135deg, #60A5FA, #0EA5E9);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -87,10 +87,12 @@ body {
 /* Scrollable poster row */
 .poster-scroll {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 .poster-scroll::-webkit-scrollbar { display: none; }
 

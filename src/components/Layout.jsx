@@ -27,7 +27,7 @@ export default function Layout() {
           <NavLink
             to="/add"
             className="btn-press -mt-5 w-14 h-14 rounded-full flex items-center justify-center shadow-xl"
-            style={{ background: 'linear-gradient(135deg, #ff6b35, #e91e8c)' }}
+            style={{ background: 'linear-gradient(135deg, #1747D0, #0EA5E9)' }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>

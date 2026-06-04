@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import LogMediaSheet from '../components/LogMediaSheet'
+import RatingModal from '../components/RatingModal'
 
 export default function ProfilePage() {
   const { userId } = useParams()
@@ -20,12 +21,14 @@ export default function ProfilePage() {
   const [activity, setActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [showLogSheet, setShowLogSheet] = useState(false)
+  const [editingLogItem, setEditingLogItem] = useState(null)
 
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [editingPlatforms, setEditingPlatforms] = useState(false)
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
   const [saving, setSaving] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
 
   useEffect(() => {
     fetchProfile()
@@ -57,10 +60,10 @@ export default function ProfilePage() {
   async function fetchMediaLog() {
     const { data } = await supabase
       .from('user_media_log')
-      .select('*')
+      .select('*, source_user:source_user_id(username, display_name)')
       .eq('user_id', targetId)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(30)
     setMediaLog(data ?? [])
   }
 
@@ -106,8 +109,7 @@ export default function ProfilePage() {
     )
   }
 
-  async function handleSignOut() {
-    if (!window.confirm('Sign out of Queued?')) return
+  async function doSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
   }
@@ -132,7 +134,7 @@ export default function ProfilePage() {
               className="input-glass text-center text-lg font-bold py-2 max-w-[200px]"
             />
             <button onClick={saveProfile} disabled={saving}
-              className="btn-press text-xs font-bold px-3 py-2 rounded-xl text-purple-900"
+              className="btn-press text-xs font-bold px-3 py-2 rounded-xl text-[#040C21]"
               style={{ background: 'white' }}>
               {saving ? '…' : 'Save'}
             </button>
@@ -155,16 +157,30 @@ export default function ProfilePage() {
           )}
           {!isOwnProfile && (
             <button onClick={() => navigate(`/list/${targetId}`)}
-              className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-purple-900"
+              className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-[#040C21]"
               style={{ background: 'white' }}>
               View list
             </button>
           )}
           {isOwnProfile && (
-            <button onClick={handleSignOut}
-              className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/20 text-white/40">
-              Sign out
-            </button>
+            confirmSignOut ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/50">Sign out?</span>
+                <button onClick={doSignOut}
+                  className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-white bg-rose-500/60 border border-rose-400/40">
+                  Yes
+                </button>
+                <button onClick={() => setConfirmSignOut(false)}
+                  className="btn-press text-xs font-semibold px-3 py-1.5 rounded-full text-white/50 border border-white/20">
+                  No
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmSignOut(true)}
+                className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/20 text-white/40">
+                Sign out
+              </button>
+            )
           )}
         </div>
       </div>
@@ -188,7 +204,7 @@ export default function ProfilePage() {
           {isOwnProfile && (
             <button
               onClick={() => setShowLogSheet(true)}
-              className="btn-press w-8 h-8 rounded-full flex items-center justify-center font-bold text-purple-900 shadow-lg text-lg"
+              className="btn-press w-8 h-8 rounded-full flex items-center justify-center font-bold text-[#040C21] shadow-lg text-lg"
               style={{ background: 'white' }}
             >
               +
@@ -204,7 +220,7 @@ export default function ProfilePage() {
             </p>
             {isOwnProfile && (
               <button onClick={() => setShowLogSheet(true)}
-                className="btn-press mt-3 text-xs font-bold px-4 py-2 rounded-full text-purple-900"
+                className="btn-press mt-3 text-xs font-bold px-4 py-2 rounded-full text-[#040C21]"
                 style={{ background: 'white' }}>
                 + Log something
               </button>
@@ -213,11 +229,14 @@ export default function ProfilePage() {
         ) : (
           <div className="poster-scroll -mx-4 px-4">
             {mediaLog.map(item => (
-              <div key={item.id} className="shrink-0 w-28 group relative">
-                <div className="relative rounded-2xl overflow-hidden shadow-lg">
+              <div key={item.id} className="shrink-0 w-32 group relative">
+                <div
+                  className="relative rounded-2xl overflow-hidden shadow-lg cursor-pointer"
+                  onClick={() => isOwnProfile && setEditingLogItem(item)}
+                >
                   {item.media_poster_url
-                    ? <img src={item.media_poster_url} className="w-28 h-40 object-cover" alt={item.media_title} />
-                    : <div className="w-28 h-40 flex items-center justify-center text-3xl"
+                    ? <img src={item.media_poster_url} className="w-32 h-44 object-cover" alt={item.media_title} />
+                    : <div className="w-32 h-44 flex items-center justify-center text-3xl"
                         style={{ background: 'rgba(255,255,255,0.15)' }}>🎬</div>
                   }
                   <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5"
@@ -228,21 +247,33 @@ export default function ProfilePage() {
                         <span className="text-white text-xs font-bold">{item.rating}</span>
                       </div>
                     ) : (
-                      <span className="text-white/40 text-xs">No rating</span>
+                      <span className="text-white/40 text-xs">🔖 Queued</span>
                     )}
                   </div>
                   {isOwnProfile && (
                     <button
-                      onClick={() => deleteLogEntry(item.id)}
+                      onClick={e => { e.stopPropagation(); deleteLogEntry(item.id) }}
                       className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 text-white/70 hover:text-rose-300 text-xs items-center justify-center hidden group-hover:flex"
                     >
                       ✕
                     </button>
                   )}
+                  {isOwnProfile && item.rating && (
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ background: 'rgba(0,0,0,0.4)' }}>
+                      <span className="text-white text-sm font-bold">Edit</span>
+                    </div>
+                  )}
                 </div>
                 <p className="text-white/70 text-xs font-semibold mt-1.5 truncate">{item.media_title}</p>
-                {item.review && (
-                  <p className="text-white/30 text-[10px] mt-0.5 line-clamp-2 italic">"{item.review}"</p>
+                {item.source_type === 'recommendation' && item.source_user ? (
+                  <p className="text-white/35 text-[10px] mt-0.5 truncate">
+                    via {item.source_user.display_name || item.source_user.username}
+                  </p>
+                ) : (
+                  item.review && (
+                    <p className="text-white/30 text-[10px] mt-0.5 line-clamp-2 italic">"{item.review}"</p>
+                  )
                 )}
               </div>
             ))}
@@ -280,7 +311,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex gap-2">
               <button onClick={savePlatforms} disabled={saving}
-                className="btn-press text-xs font-bold px-4 py-2 rounded-xl text-purple-900"
+                className="btn-press text-xs font-bold px-4 py-2 rounded-xl text-[#040C21]"
                 style={{ background: 'white' }}>
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -321,11 +352,11 @@ export default function ProfilePage() {
           </p>
           <div className="poster-scroll -mx-4 px-4">
             {activity.map(r => (
-              <div key={r.id} className="shrink-0 w-28">
+              <div key={r.id} className="shrink-0 w-32">
                 <div className="relative rounded-2xl overflow-hidden shadow-lg">
                   {r.media_poster_url
-                    ? <img src={r.media_poster_url} className="w-28 h-40 object-cover" alt={r.media_title} />
-                    : <div className="w-28 h-40 flex items-center justify-center text-3xl"
+                    ? <img src={r.media_poster_url} className="w-32 h-44 object-cover" alt={r.media_title} />
+                    : <div className="w-32 h-44 flex items-center justify-center text-3xl"
                         style={{ background: 'rgba(255,255,255,0.15)' }}>🎬</div>
                   }
                   {r.rating && (
@@ -351,6 +382,16 @@ export default function ProfilePage() {
           userId={session.user.id}
           onClose={() => setShowLogSheet(false)}
           onSaved={() => { fetchMediaLog(); fetchStats() }}
+        />
+      )}
+
+      {/* Edit log entry modal */}
+      {editingLogItem && (
+        <RatingModal
+          item={editingLogItem}
+          existingEntry={editingLogItem}
+          onClose={() => setEditingLogItem(null)}
+          onSaved={() => { fetchMediaLog(); fetchStats(); setEditingLogItem(null) }}
         />
       )}
     </div>

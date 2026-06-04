@@ -55,8 +55,22 @@ export default function SharedListPage() {
     fetchRecs()
   }
 
-  async function updateRating(recId, rating) {
+  async function updateRating(recId, rating, rec) {
     await supabase.from('recommendations').update({ rating }).eq('id', recId)
+    // Auto-log to personal collection so the user's profile shows the source
+    if (rec && rating) {
+      await supabase.from('user_media_log').upsert({
+        user_id:          session.user.id,
+        media_type:       rec.media_type,
+        media_id:         rec.media_id,
+        media_title:      rec.media_title,
+        media_creator:    rec.media_creator ?? null,
+        media_poster_url: rec.media_poster_url,
+        rating,
+        source_type:      'recommendation',
+        source_user_id:   rec.sender_id,
+      }, { onConflict: 'user_id,media_id' })
+    }
     fetchRecs()
   }
 
@@ -135,7 +149,7 @@ export default function SharedListPage() {
               currentUserId={uid}
               myPlatforms={myPlatforms}
               onStatusChange={updateStatus}
-              onRatingChange={updateRating}
+              onRatingChange={(recId, rating) => updateRating(recId, rating, rec)}
               onDelete={softDelete}
             />
           ))}
@@ -154,7 +168,7 @@ function FilterRow({ options, value, onChange }) {
           onClick={() => onChange(o.value)}
           className={`btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
             value === o.value
-              ? 'text-purple-900 border-transparent'
+              ? 'text-[#040C21] border-transparent'
               : 'text-white/60 border-white/20 hover:border-white/40'
           }`}
           style={value === o.value ? { background: 'white' } : { background: 'rgba(255,255,255,0.1)' }}
