@@ -60,7 +60,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
 
       <div className="fixed inset-0 z-40 flex items-end justify-center pointer-events-none">
         <div className="pointer-events-auto w-full max-w-[430px] rounded-t-[32px] shadow-2xl pb-8"
-          style={{ background: 'linear-gradient(170deg, #0A1847 0%, #1747D0 55%, #0369A1 100%)' }}>
+          style={{ background: 'linear-gradient(170deg, #02110C 0%, #062318 52%, #0B3B2A 100%)', border: '1px solid rgba(244,233,209,0.18)' }}>
 
           <div className="pt-4 pb-2 flex justify-center">
             <div className="w-10 h-1 bg-white/30 rounded-full" />
@@ -99,13 +99,11 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
             {step === 'choose' && (
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={addToQueue} disabled={saving}
-                  className="btn-press py-4 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
-                  style={{ background: 'white' }}>
+                  className="btn-press btn-cream py-4 rounded-2xl font-bold text-sm disabled:opacity-40">
                   {saving ? 'Saving...' : 'Add to queue'}
                 </button>
                 <button onClick={() => setStep('rate')}
-                  className="btn-press py-4 rounded-2xl font-bold text-sm text-white border border-white/30"
-                  style={{ background: 'rgba(255,255,255,0.14)' }}>
+                  className="btn-press btn-outline-cream py-4 rounded-2xl font-bold text-sm">
                   Rate / log
                 </button>
               </div>
@@ -159,13 +157,11 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                 {step === 'rate' && rating && (
                   <div className="flex gap-3 pt-1">
                     <button onClick={() => setStep('comment')}
-                      className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21]"
-                      style={{ background: 'white' }}>
+                      className="btn-press btn-cream flex-1 py-3.5 rounded-2xl font-bold text-sm">
                       Add comment
                     </button>
                     <button onClick={() => save(false)} disabled={saving}
-                      className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-white border border-white/30 disabled:opacity-40"
-                      style={{ background: 'rgba(255,255,255,0.15)' }}>
+                      className="btn-press btn-outline-cream flex-1 py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
                       {saving ? 'Saving...' : 'Log finished'}
                     </button>
                   </div>
@@ -186,13 +182,11 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => save(true)} disabled={saving}
-                    className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
-                    style={{ background: 'white' }}>
+                    className="btn-press btn-cream flex-1 py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
                     {saving ? 'Saving...' : 'Save finished log'}
                   </button>
                   <button onClick={() => save(false)} disabled={saving}
-                    className="btn-press py-3.5 px-4 rounded-2xl text-sm text-white/60 border border-white/20 disabled:opacity-40"
-                    style={{ background: 'rgba(255,255,255,0.1)' }}>
+                    className="btn-press btn-outline-cream py-3.5 px-4 rounded-2xl text-sm disabled:opacity-40">
                     Log without comment
                   </button>
                 </div>

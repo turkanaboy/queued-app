@@ -106,8 +106,7 @@ export default function FriendsPage() {
                 </div>
                 <button
                   onClick={() => sendRequest(u.id)}
-                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-[#040C21]"
-                  style={{ background: 'white' }}
+                  className="btn-press btn-cream text-xs font-bold px-4 py-1.5 rounded-full"
                 >
                   Add
                 </button>
@@ -123,7 +122,7 @@ export default function FriendsPage() {
           <SectionLabel>Requests · {incoming.length}</SectionLabel>
           <div className="space-y-2 mt-3">
             {incoming.map(f => (
-              <div key={f.id} className="glass rounded-2xl px-4 py-3 flex items-center justify-between">
+              <div key={f.id} className="queue-strip rounded-[22px] px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
                   <div>
@@ -133,12 +132,11 @@ export default function FriendsPage() {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => acceptRequest(f.id)}
-                    className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-[#040C21]"
-                    style={{ background: 'white' }}>
+                    className="btn-press btn-cream text-xs font-bold px-3 py-1.5 rounded-full">
                     Accept
                   </button>
                   <button onClick={() => declineRequest(f.id)}
-                    className="btn-press text-xs font-semibold px-3 py-1.5 rounded-full text-white/70 border border-white/20">
+                    className="btn-press btn-outline-cream text-xs font-semibold px-3 py-1.5 rounded-full">
                     Decline
                   </button>
                 </div>
@@ -154,14 +152,14 @@ export default function FriendsPage() {
         {loading ? (
           <p className="text-white/40 text-sm mt-3">Loading…</p>
         ) : friends.length === 0 ? (
-          <div className="glass rounded-2xl p-6 text-center mt-3">
+          <div className="queue-strip rounded-[22px] p-6 text-center mt-3">
             <p className="text-3xl mb-2">👋</p>
             <p className="text-white/60 text-sm">No friends yet — search above to add someone.</p>
           </div>
         ) : (
           <div className="space-y-2 mt-3">
             {friends.map((f, i) => (
-              <div key={f.id} className={`glass rounded-2xl px-4 py-3 flex items-center justify-between anim-up`}
+              <div key={f.id} className={`queue-strip rounded-[22px] px-4 py-3 flex items-center justify-between anim-up`}
                 style={{ animationDelay: `${i * 50}ms` }}>
                 <button
                   onClick={() => navigate(`/profile/${f.friend.id}`)}
@@ -175,8 +173,7 @@ export default function FriendsPage() {
                 </button>
                 <button
                   onClick={() => navigate(`/list/${f.friend.id}`)}
-                  className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/30 text-white"
-                  style={{ background: 'rgba(255,255,255,0.15)' }}
+                  className="btn-press btn-outline-cream text-xs font-bold px-4 py-1.5 rounded-full"
                 >
                   View list
                 </button>
@@ -192,7 +189,7 @@ export default function FriendsPage() {
           <SectionLabel>Sent requests</SectionLabel>
           <div className="space-y-2 mt-3">
             {pending.map(f => (
-              <div key={f.id} className="glass rounded-2xl px-4 py-3 flex items-center gap-3 opacity-50">
+              <div key={f.id} className="queue-strip rounded-[22px] px-4 py-3 flex items-center gap-3 opacity-60">
                 <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
                 <div>
                   <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>

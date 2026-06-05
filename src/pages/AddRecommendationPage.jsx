@@ -152,7 +152,7 @@ export default function AddRecommendationPage() {
       {/* Media search */}
       <div className="anim-up space-y-3">
         {/* Type selector */}
-        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="paper-tabs flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {[
             { v: 'multi', l: 'All' },
             { v: 'movie', l: '🎬 Movies' },
@@ -161,11 +161,12 @@ export default function AddRecommendationPage() {
             { v: 'album', l: '🎵 Albums' },
           ].map(t => (
             <button key={t.v} onClick={() => changeSearchType(t.v)}
-              className="btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
+              className="btn-press shrink-0 text-xs font-extrabold px-3 py-2 rounded-xl border transition-all"
               style={{
-                background: searchType === t.v ? 'white' : 'rgba(255,255,255,0.1)',
-                border: searchType === t.v ? 'transparent' : '1px solid rgba(255,255,255,0.2)',
-                color: searchType === t.v ? '#040C21' : 'rgba(255,255,255,0.6)',
+                background: searchType === t.v ? '#F4E9D1' : 'rgba(2,17,12,0.42)',
+                border: searchType === t.v ? '1px solid #D8A84A' : '1px solid rgba(244,233,209,0.18)',
+                borderTopWidth: searchType === t.v ? '4px' : '1px',
+                color: searchType === t.v ? '#052016' : 'rgba(244,233,209,0.72)',
               }}>
               {t.l}
             </button>
@@ -295,8 +296,7 @@ export default function AddRecommendationPage() {
 
       <button onClick={handleSubmit}
         disabled={submitting || !selected || sendableCount === 0}
-        className="btn-press w-full py-4 rounded-2xl font-bold text-[#040C21] text-sm shadow-xl disabled:opacity-40"
-        style={{ background: 'white' }}>
+        className="btn-press btn-cream w-full py-4 rounded-2xl font-bold text-sm disabled:opacity-40">
         {submitting ? 'Sending…' : sendableCount > 0
           ? `Send to ${sendableCount} friend${sendableCount !== 1 ? 's' : ''} 🚀`
           : 'Select a title & friend'}

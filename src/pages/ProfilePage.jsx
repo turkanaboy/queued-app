@@ -29,12 +29,12 @@ const STATUS_ICONS = {
   finished: '✅',
 }
 const STATUS_COLORS = {
-  not_yet_viewed: 'bg-blue-400/30 text-blue-100',
-  queued: 'bg-sky-400/30 text-sky-100',
-  in_progress: 'bg-amber-400/30 text-amber-100',
-  skipped: 'bg-white/10 text-white/50',
-  bailed: 'bg-rose-400/30 text-rose-100',
-  finished: 'bg-green-400/30 text-green-100',
+  not_yet_viewed: 'bg-[#F4E9D1] text-[#052016]',
+  queued: 'bg-[#D8A84A]/25 text-[#F4E9D1] border border-[#D8A84A]/45',
+  in_progress: 'bg-[#B87333]/35 text-[#FFF8E8] border border-[#B87333]/45',
+  skipped: 'bg-[#052016]/60 text-[#F4E9D1]/60 border border-[#F4E9D1]/20',
+  bailed: 'bg-[#C96B4B]/35 text-[#FFE5DC] border border-[#C96B4B]/45',
+  finished: 'bg-[#2DD48F]/22 text-[#D7FBE8] border border-[#2DD48F]/38',
 }
 
 export default function ProfilePage() {
@@ -349,7 +349,12 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6 pb-4">
       {/* Profile hero */}
-      <div className="anim-scale text-center pt-4">
+      <div className="anim-scale overflow-hidden rounded-[30px] border border-[#F4E9D1]/18 bg-[#062318]/70 text-center shadow-2xl">
+        <div className="bg-[#F4E9D1] px-5 py-3 text-left">
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#B87333]">Queued</p>
+          <p className="text-xl font-black text-[#052016] leading-tight">{isOwnProfile ? 'My Queue' : 'Media list'}</p>
+        </div>
+        <div className="px-5 py-5">
         <div className="flex justify-center mb-4">
           <InitialsAvatar name={profile.display_name || profile.username} size="xl" />
         </div>
@@ -363,54 +368,52 @@ export default function ProfilePage() {
               className="input-glass text-center text-lg font-bold py-2 max-w-[200px]"
             />
             <button onClick={saveProfile} disabled={saving}
-              className="btn-press text-xs font-bold px-3 py-2 rounded-xl text-[#040C21]"
-              style={{ background: 'white' }}>
+              className="btn-press btn-cream text-xs font-bold px-3 py-2 rounded-xl">
               {saving ? '…' : 'Save'}
             </button>
             <button onClick={() => setEditing(false)} className="btn-press text-xs text-white/50 p-2">✕</button>
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-extrabold text-white">{profile.display_name || profile.username}</h1>
-            <p className="text-white/50 text-sm mt-0.5">@{profile.username}</p>
+            <h1 className="text-2xl font-extrabold text-[#F7F1E4]">{profile.display_name || profile.username}</h1>
+            <p className="text-[#F4E9D1]/55 text-sm mt-0.5">@{profile.username}</p>
           </>
         )}
 
         <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
           {isOwnProfile && !editing && (
             <button onClick={() => setEditing(true)}
-              className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/30 text-white/70"
-              style={{ background: 'rgba(255,255,255,0.1)' }}>
+              className="btn-press btn-outline-cream text-xs font-bold px-4 py-1.5 rounded-full">
               Edit profile
             </button>
           )}
           {!isOwnProfile && (
             <button onClick={() => navigate(`/list/${targetId}`)}
-              className="btn-press text-xs font-bold px-4 py-1.5 rounded-full text-[#040C21]"
-              style={{ background: 'white' }}>
+              className="btn-press btn-cream text-xs font-bold px-4 py-1.5 rounded-full">
               View list
             </button>
           )}
           {isOwnProfile && (
             confirmSignOut ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-white/50">Sign out?</span>
+                <span className="text-xs text-[#F4E9D1]/55">Sign out?</span>
                 <button onClick={doSignOut}
-                  className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-white bg-rose-500/60 border border-rose-400/40">
+                  className="btn-press text-xs font-bold px-3 py-1.5 rounded-full text-[#FFF8E8] bg-[#C96B4B]/70 border border-[#C96B4B]">
                   Yes
                 </button>
                 <button onClick={() => setConfirmSignOut(false)}
-                  className="btn-press text-xs font-semibold px-3 py-1.5 rounded-full text-white/50 border border-white/20">
+                  className="btn-press btn-outline-cream text-xs font-semibold px-3 py-1.5 rounded-full">
                   No
                 </button>
               </div>
             ) : (
               <button onClick={() => setConfirmSignOut(true)}
-                className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-white/20 text-white/40">
+                className="btn-press text-xs font-bold px-4 py-1.5 rounded-full border border-[#F4E9D1]/20 text-[#F4E9D1]/45">
                 Sign out
               </button>
             )
           )}
+        </div>
         </div>
       </div>
 
@@ -457,15 +460,13 @@ export default function ProfilePage() {
               <button
                 onClick={requestBotRecommendation}
                 disabled={botLoading}
-                className="btn-press text-xs font-bold px-3 py-2 rounded-full border border-white/20 text-white/70 disabled:opacity-40"
-                style={{ background: activeBotRecommendation ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)' }}
+                className={`btn-press text-xs font-bold px-3 py-2 rounded-full disabled:opacity-40 ${activeBotRecommendation ? 'btn-outline-cream' : 'btn-cream'}`}
               >
                 {botLoading ? 'Thinking...' : activeBotRecommendation ? 'Bot waiting' : 'Ask Bot'}
               </button>
               <button
                 onClick={() => setShowLogSheet(true)}
-                className="btn-press w-8 h-8 rounded-full flex items-center justify-center font-bold text-[#040C21] shadow-lg text-lg"
-                style={{ background: 'white' }}
+                className="btn-press btn-copper w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg"
               >
                 +
               </button>
@@ -504,15 +505,14 @@ export default function ProfilePage() {
         )}
 
         {personalItems.length === 0 ? (
-          <div className="glass rounded-3xl p-6 text-center">
+          <div className="queue-strip rounded-[24px] p-6 text-center">
             <p className="text-3xl mb-2">📋</p>
             <p className="text-white/40 text-sm">
               {isOwnProfile ? 'Nothing matches these filters yet.' : 'Nothing logged yet'}
             </p>
             {isOwnProfile && (
               <button onClick={() => setShowLogSheet(true)}
-                className="btn-press mt-3 text-xs font-bold px-4 py-2 rounded-full text-[#040C21]"
-                style={{ background: 'white' }}>
+                className="btn-press btn-cream mt-3 text-xs font-bold px-4 py-2 rounded-full">
                 + Add something
               </button>
             )}
@@ -520,7 +520,7 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-2.5">
             {personalItems.map(item => (
-              <div key={`${item.item_kind}-${item.id}`} className="glass rounded-2xl p-3 flex gap-3">
+              <div key={`${item.item_kind}-${item.id}`} className="queue-strip rounded-[22px] p-3 flex gap-3">
                 <button
                   className="relative shrink-0 rounded-xl overflow-hidden shadow-lg"
                   onClick={() => isOwnProfile && item.item_kind !== 'sent' && setEditingLogItem(item)}
@@ -535,8 +535,8 @@ export default function ProfilePage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-white text-sm font-extrabold truncate">{item.media_title}</p>
-                      <p className="text-white/45 text-xs capitalize mt-0.5 truncate">
+                      <p className="text-[#F7F1E4] text-sm font-extrabold truncate">{item.media_title}</p>
+                      <p className="text-[#F4E9D1]/50 text-xs capitalize mt-0.5 truncate">
                         {TYPE_ICON[item.media_type] ?? '🎬'} {item.media_type}
                         {item.media_creator ? ` · ${item.media_creator}` : ''}
                       </p>
@@ -546,7 +546,7 @@ export default function ProfilePage() {
                     </span>
                   </div>
 
-                  <p className="text-white/40 text-xs mt-1.5 truncate">{item.origin}</p>
+                  <p className="text-[#F4E9D1]/45 text-xs mt-1.5 truncate">{item.origin}</p>
 
                   {item.rating && (
                     <div className="flex items-center gap-1 mt-1.5">
@@ -619,13 +619,11 @@ export default function ProfilePage() {
             </div>
             <div className="flex gap-2">
               <button onClick={savePlatforms} disabled={saving}
-                className="btn-press text-xs font-bold px-4 py-2 rounded-xl text-[#040C21]"
-                style={{ background: 'white' }}>
+                className="btn-press btn-cream text-xs font-bold px-4 py-2 rounded-xl">
                 {saving ? 'Saving…' : 'Save'}
               </button>
               <button onClick={() => { setEditingPlatforms(false); setSelectedPlatforms(profile?.platforms ?? []) }}
-                className="btn-press text-xs text-white/50 px-4 py-2 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.1)' }}>
+                className="btn-press btn-outline-cream text-xs px-4 py-2 rounded-xl">
                 Cancel
               </button>
             </div>
@@ -712,28 +710,33 @@ function StatCard({ emoji, label, value, active = false, compact = false, onClic
     <Component
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`glass btn-press rounded-2xl ${compact ? 'p-2.5' : 'p-3'} text-center transition-all ${onClick ? 'cursor-pointer hover:border-white/50' : ''} ${active ? 'ring-2 ring-white/80 bg-white/20' : ''}`}
+      className={`btn-press relative overflow-hidden rounded-[18px] border ${compact ? 'p-2.5' : 'p-3'} text-center transition-all ${
+        active
+          ? 'bg-[#F4E9D1] border-[#D8A84A] text-[#052016] shadow-[0_7px_0_rgba(184,115,51,0.32)]'
+          : 'bg-[#0B2D20]/88 border-[#F4E9D1]/18 text-[#F7F1E4] hover:border-[#F4E9D1]/45'
+      } ${onClick ? 'cursor-pointer' : ''}`}
     >
-      <p className={`${compact ? 'text-base' : 'text-xl'} mb-0.5`}>{emoji}</p>
-      <p className={`${compact ? 'text-lg' : 'text-xl'} font-extrabold text-white`}>{value}</p>
-      <p className="text-white/50 text-[10px] font-semibold mt-0.5 leading-tight">{label}</p>
+      <span className="absolute right-0 top-0 h-5 w-5 rounded-bl-xl bg-[#B87333]/80" />
+      <p className={`${compact ? 'text-base' : 'text-xl'} mb-0.5 relative`}>{emoji}</p>
+      <p className={`${compact ? 'text-lg' : 'text-xl'} font-extrabold relative`}>{value}</p>
+      <p className={`text-[10px] font-semibold mt-0.5 leading-tight relative ${active ? 'text-[#052016]/68' : 'text-[#F4E9D1]/54'}`}>{label}</p>
     </Component>
   )
 }
 
 function FilterRow({ options, value, onChange }) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+    <div className="paper-tabs flex gap-1 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
       {options.map(o => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+          className={`btn-press shrink-0 text-xs font-extrabold px-3 py-2 border transition-all ${
             value === o.value
-              ? 'text-[#040C21] border-transparent'
-              : 'text-white/60 border-white/20 hover:border-white/40'
+              ? 'rounded-xl text-[#052016] border-[#D8A84A] border-t-4'
+              : 'rounded-xl text-[#F4E9D1]/70 border-[#F4E9D1]/18 hover:border-[#F4E9D1]/42'
           }`}
-          style={value === o.value ? { background: 'white' } : { background: 'rgba(255,255,255,0.1)' }}
+          style={value === o.value ? { background: '#F4E9D1' } : { background: 'rgba(2,17,12,0.42)' }}
         >
           {o.label}
         </button>
@@ -747,11 +750,10 @@ function StatusSelect({ value, onChange }) {
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="btn-press text-xs font-bold text-white/70 border border-white/20 rounded-full px-2 py-1.5 outline-none"
-      style={{ background: 'rgba(255,255,255,0.1)' }}
+      className="btn-press btn-outline-cream text-xs font-bold rounded-full px-2 py-1.5 outline-none"
     >
       {STATUS_OPTIONS.filter(s => s !== 'all').map(s => (
-        <option key={s} value={s} className="bg-[#0A1847] text-white">
+        <option key={s} value={s} className="bg-[#062318] text-[#F4E9D1]">
           {STATUS_LABELS[s]}
         </option>
       ))}

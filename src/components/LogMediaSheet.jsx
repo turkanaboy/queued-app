@@ -82,7 +82,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 rounded-t-[32px] shadow-2xl"
-        style={{ background: 'linear-gradient(170deg, #0A1847 0%, #1747D0 55%, #0369A1 100%)' }}>
+        style={{ background: 'linear-gradient(170deg, #02110C 0%, #062318 52%, #0B3B2A 100%)', border: '1px solid rgba(244,233,209,0.18)' }}>
         <div className="px-5 pt-4 pb-8 space-y-4">
           <div className="w-10 h-1 bg-white/30 rounded-full mx-auto" />
 
@@ -99,10 +99,10 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
                   <button key={t.value} onClick={() => changeType(t.value)}
                     className={`btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
                       searchType === t.value
-                        ? 'text-[#040C21] border-transparent'
-                        : 'text-white/60 border-white/20'
+                        ? 'text-[#052016] border-[#D8A84A]'
+                        : 'text-[#F4E9D1]/60 border-[#F4E9D1]/20'
                     }`}
-                    style={{ background: searchType === t.value ? 'white' : 'rgba(255,255,255,0.1)' }}>
+                    style={{ background: searchType === t.value ? '#F4E9D1' : 'rgba(2,17,12,0.42)' }}>
                     {t.label}
                   </button>
                 ))}
@@ -195,8 +195,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
               {error && <p className="text-rose-300 text-sm">{error}</p>}
 
               <button onClick={handleSave} disabled={saving}
-                className="btn-press w-full py-3.5 rounded-2xl font-bold text-[#040C21] text-sm disabled:opacity-40"
-                style={{ background: 'white' }}>
+                className="btn-press btn-cream w-full py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
                 {saving ? 'Saving…' : rating ? 'Save to my collection 📝' : 'Add to queue'}
               </button>
             </div>

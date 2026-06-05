@@ -5,9 +5,12 @@
 body {
   font-family: 'Plus Jakarta Sans', sans-serif;
   min-height: 100dvh;
-  background: linear-gradient(145deg, #040C21 0%, #1747D0 52%, #0EA5E9 100%);
+  background:
+    radial-gradient(circle at 50% -15%, rgba(184, 115, 51, 0.18), transparent 34%),
+    linear-gradient(160deg, #02110C 0%, #062318 48%, #0B3B2A 100%);
   background-attachment: fixed;
   overscroll-behavior: none;
+  color: #F7F1E4;
 }
 
 #root {
@@ -19,28 +22,30 @@ body {
 
 /* Glass utilities */
 .glass {
-  background: rgba(15, 31, 78, 0.72);
+  background: rgba(8, 43, 30, 0.84);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.26);
+  border: 1px solid rgba(244, 233, 209, 0.2);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
 }
 
 .glass-dark {
-  background: rgba(3, 10, 31, 0.84);
+  background: rgba(3, 22, 15, 0.92);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(244, 233, 209, 0.24);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
 }
 
 .glass-white {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(247, 241, 228, 0.94);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
 
 /* Gradient ring for avatars */
 .avatar-ring {
-  background: linear-gradient(135deg, #1747D0, #0EA5E9, #93C5FD);
+  background: linear-gradient(135deg, #F4E9D1, #D8A84A, #B87333);
   padding: 3px;
   border-radius: 9999px;
 }
@@ -78,7 +83,7 @@ body {
 
 /* Gradient text */
 .grad-text {
-  background: linear-gradient(135deg, #60A5FA, #0EA5E9);
+  background: linear-gradient(135deg, #F4E9D1, #D8A84A);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -98,21 +103,58 @@ body {
 
 /* Input base */
 .input-glass {
-  background: rgba(5, 16, 48, 0.72);
-  border: 1px solid rgba(255,255,255,0.42);
-  color: white;
+  background: rgba(2, 17, 12, 0.82);
+  border: 1.5px solid rgba(244, 233, 209, 0.58);
+  color: #F7F1E4;
   border-radius: 16px;
   padding: 12px 16px;
   font-size: 14px;
   font-family: inherit;
   outline: none;
   width: 100%;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
-.input-glass::placeholder { color: rgba(255,255,255,0.5); }
-.input-glass:focus { border-color: rgba(255,255,255,0.72); background: rgba(7, 22, 62, 0.88); }
+.input-glass::placeholder { color: rgba(247,241,228,0.48); }
+.input-glass:focus {
+  border-color: rgba(216, 168, 74, 0.9);
+  background: rgba(4, 28, 20, 0.96);
+  box-shadow: 0 0 0 3px rgba(216, 168, 74, 0.14);
+}
 .input-search { padding-left: 44px; }
+
+.btn-cream {
+  background: #F4E9D1;
+  border: 1px solid rgba(216, 168, 74, 0.9);
+  box-shadow: 0 6px 0 rgba(184, 115, 51, 0.36), 0 14px 28px rgba(0, 0, 0, 0.22);
+  color: #052016;
+}
+
+.btn-copper {
+  background: linear-gradient(135deg, #C96B4B, #B87333);
+  border: 1px solid rgba(244, 233, 209, 0.45);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.26);
+  color: #FFF8E8;
+}
+
+.btn-outline-cream {
+  background: rgba(2, 17, 12, 0.56);
+  border: 1.5px solid rgba(244, 233, 209, 0.56);
+  color: rgba(247, 241, 228, 0.82);
+}
+
+.paper-tabs {
+  background: rgba(2, 17, 12, 0.44);
+  border: 1px solid rgba(244, 233, 209, 0.18);
+  border-radius: 18px;
+  padding: 4px;
+}
+
+.queue-strip {
+  background: rgba(5, 34, 24, 0.88);
+  border: 1px solid rgba(244, 233, 209, 0.16);
+  box-shadow: inset 4px 0 0 rgba(184, 115, 51, 0.72), 0 12px 30px rgba(0, 0, 0, 0.18);
+}
 
 /* Button press feedback */
 .btn-press { transition: transform 0.1s, opacity 0.1s; }
