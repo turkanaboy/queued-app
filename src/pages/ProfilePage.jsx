@@ -20,6 +20,14 @@ const STATUS_LABELS = {
   bailed: 'Bailed',
   finished: 'Finished',
 }
+const STATUS_ICONS = {
+  not_yet_viewed: '✨',
+  queued: '📌',
+  in_progress: '▶️',
+  skipped: '↷',
+  bailed: '⏹',
+  finished: '✅',
+}
 const STATUS_COLORS = {
   not_yet_viewed: 'bg-blue-400/30 text-blue-100',
   queued: 'bg-sky-400/30 text-sky-100',
@@ -306,6 +314,14 @@ export default function ProfilePage() {
     ...stats,
     finished: allItems.filter(item => item.status === 'finished').length,
   } : null
+  const statusStats = STATUS_OPTIONS
+    .filter(status => status !== 'all')
+    .map(status => ({
+      status,
+      label: STATUS_LABELS[status],
+      value: allItems.filter(item => item.status === status).length,
+      emoji: STATUS_ICONS[status],
+    }))
 
   const personalItems = allItems.filter(item => {
     if (originFilter === 'mine' && item.origin_type !== 'self') return false
@@ -400,13 +416,29 @@ export default function ProfilePage() {
 
       {/* Stats */}
       {displayStats && (
-        <div className="grid grid-cols-3 gap-3 anim-up">
-          <StatCard emoji="📝" label="Logged" value={displayStats.logged} active={originFilter === 'all' && statusFilter === 'all' && typeFilter === 'all'} onClick={() => applyStatFilter()} />
-          <StatCard emoji="✅" label="Finished" value={displayStats.finished} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
-          <StatCard emoji="⭐" label="Avg rating" value={displayStats.avgRating ?? '—'} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
-          <StatCard emoji="📤" label="Sent" value={displayStats.sent} active={originFilter === 'sent'} onClick={() => applyStatFilter({ origin: 'sent' })} />
-          <StatCard emoji="📥" label="Received" value={displayStats.received} active={originFilter === 'recommendations'} onClick={() => applyStatFilter({ origin: 'recommendations' })} />
-          <StatCard emoji="👥" label="Friends" value={displayStats.friends} onClick={() => applyStatFilter({ route: '/friends' })} />
+        <div className="space-y-3 anim-up">
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard emoji="📝" label="Logged" value={displayStats.logged} active={originFilter === 'all' && statusFilter === 'all' && typeFilter === 'all'} onClick={() => applyStatFilter()} />
+            <StatCard emoji="✅" label="Finished" value={displayStats.finished} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
+            <StatCard emoji="⭐" label="Avg rating" value={displayStats.avgRating ?? '—'} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
+            <StatCard emoji="📤" label="Sent" value={displayStats.sent} active={originFilter === 'sent'} onClick={() => applyStatFilter({ origin: 'sent' })} />
+            <StatCard emoji="📥" label="Received" value={displayStats.received} active={originFilter === 'recommendations'} onClick={() => applyStatFilter({ origin: 'recommendations' })} />
+            <StatCard emoji="👥" label="Friends" value={displayStats.friends} onClick={() => applyStatFilter({ route: '/friends' })} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {statusStats.map(item => (
+              <StatCard
+                key={item.status}
+                emoji={item.emoji}
+                label={item.label}
+                value={item.value}
+                active={statusFilter === item.status}
+                compact
+                onClick={() => applyStatFilter({ status: item.status })}
+              />
+            ))}
+          </div>
         </div>
       )}
       {/* Personal task list */}
@@ -674,17 +706,17 @@ export default function ProfilePage() {
   )
 }
 
-function StatCard({ emoji, label, value, active = false, onClick }) {
+function StatCard({ emoji, label, value, active = false, compact = false, onClick }) {
   const Component = onClick ? 'button' : 'div'
   return (
     <Component
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`glass btn-press rounded-2xl p-3 text-center transition-all ${onClick ? 'cursor-pointer hover:border-white/50' : ''} ${active ? 'ring-2 ring-white/80 bg-white/20' : ''}`}
+      className={`glass btn-press rounded-2xl ${compact ? 'p-2.5' : 'p-3'} text-center transition-all ${onClick ? 'cursor-pointer hover:border-white/50' : ''} ${active ? 'ring-2 ring-white/80 bg-white/20' : ''}`}
     >
-      <p className="text-xl mb-0.5">{emoji}</p>
-      <p className="text-xl font-extrabold text-white">{value}</p>
-      <p className="text-white/50 text-[10px] font-semibold mt-0.5">{label}</p>
+      <p className={`${compact ? 'text-base' : 'text-xl'} mb-0.5`}>{emoji}</p>
+      <p className={`${compact ? 'text-lg' : 'text-xl'} font-extrabold text-white`}>{value}</p>
+      <p className="text-white/50 text-[10px] font-semibold mt-0.5 leading-tight">{label}</p>
     </Component>
   )
 }
