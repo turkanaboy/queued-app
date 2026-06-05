@@ -7,6 +7,58 @@ const OL_BASE          = 'https://openlibrary.org'
 const OL_COVER         = 'https://covers.openlibrary.org/b/id'
 const ITUNES_BASE      = 'https://itunes.apple.com'
 
+const TMDB_GENRES: Record<string, number> = {
+  Action: 28,
+  Adventure: 12,
+  Animation: 16,
+  Comedy: 35,
+  Crime: 80,
+  Documentary: 99,
+  Drama: 18,
+  Dramedy: 35,
+  Fantasy: 14,
+  'Ghost stories': 27,
+  Horror: 27,
+  Mystery: 9648,
+  Romance: 10749,
+  'Sci-Fi': 878,
+  Superhero: 28,
+  Thriller: 53,
+  'Animated series': 16,
+  Docuseries: 99,
+}
+
+const BOOK_SUBJECTS: Record<string, string> = {
+  Biography: 'biography',
+  'Book club fiction': 'fiction',
+  Fantasy: 'fantasy',
+  'Historical fiction': 'historical_fiction',
+  Horror: 'horror',
+  'Literary fiction': 'literary_fiction',
+  Memoir: 'memoir',
+  Mystery: 'mystery',
+  Nonfiction: 'nonfiction',
+  Romance: 'romance',
+  'Sci-Fi': 'science_fiction',
+  'Short stories': 'short_stories',
+  Thriller: 'thriller',
+}
+
+const ALBUM_TERMS: Record<string, string> = {
+  Alternative: 'alternative',
+  Country: 'country',
+  Electronic: 'electronic',
+  Folk: 'folk',
+  'Hip-Hop': 'hip-hop',
+  Indie: 'indie',
+  Jazz: 'jazz',
+  Pop: 'pop',
+  'R&B': 'r&b',
+  Rock: 'rock',
+  'Singer-songwriter': 'singer songwriter',
+  Soul: 'soul',
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -36,6 +88,17 @@ function mapBook(doc: any) {
     media_creator:    doc.author_name?.[0] ?? null,
     media_poster_url: doc.cover_i ? `${OL_COVER}/${doc.cover_i}-M.jpg` : null,
     year:             String(doc.first_publish_year ?? ''),
+  }
+}
+
+function mapSubjectBook(work: any) {
+  return {
+    media_id:         work.key?.replace('/works/', '') ?? String(work.cover_id ?? Math.random()),
+    media_type:       'book',
+    media_title:      work.title ?? 'Unknown Title',
+    media_creator:    work.authors?.[0]?.name ?? null,
+    media_poster_url: work.cover_id ? `${OL_COVER}/${work.cover_id}-M.jpg` : null,
+    year:             String(work.first_publish_year ?? ''),
   }
 }
 
@@ -75,26 +138,42 @@ serve(async (req) => {
   // ── Trending / popular carousels ─────────────────────────────
   if (action === 'trending') {
     const mediaType = searchParams.get('media_type') ?? 'movie'
-    const page      = searchParams.get('page') ?? '1'
+    const page      = Number(searchParams.get('page') ?? '1')
+    const offset    = Math.max(0, page - 1) * 24
+    const genre     = searchParams.get('genre')
 
     // Books — Open Library weekly trending
     if (mediaType === 'book') {
-      const res  = await fetch(`${OL_BASE}/trending/weekly.json?limit=24`)
+      const subject = genre ? BOOK_SUBJECTS[genre] : null
+      const res  = await fetch(subject ? `${OL_BASE}/subjects/${subject}.json?limit=24&offset=${offset}` : `${OL_BASE}/trending/weekly.json?limit=24&offset=${offset}`)
       const data = await res.json()
-      const results = (data.works ?? []).filter((w: any) => w.cover_i).map(mapBook)
+      const results = subject
+        ? (data.works ?? []).filter((w: any) => w.cover_id).map(mapSubjectBook)
+        : (data.works ?? []).filter((w: any) => w.cover_i).map(mapBook)
       return json({ results, total_pages: 5 })
     }
 
     // Albums — iTunes top albums RSS
     if (mediaType === 'album') {
-      const res  = await fetch(`${ITUNES_BASE}/us/rss/topalbums/limit=25/json`)
+      if (!genre && page === 1) {
+        const res  = await fetch(`${ITUNES_BASE}/us/rss/topalbums/limit=25/json`)
+        const data = await res.json()
+        const results = (data.feed?.entry ?? []).map(mapItunesRssEntry).filter((r: any) => r.media_poster_url)
+        return json({ results, total_pages: 5 })
+      }
+      const term = genre ? ALBUM_TERMS[genre] ?? genre : 'new music'
+      const res  = await fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(term)}&entity=album&media=music&limit=24&offset=${offset}&country=US`)
       const data = await res.json()
-      const results = (data.feed?.entry ?? []).map(mapItunesRssEntry).filter((r: any) => r.media_poster_url)
-      return json({ results, total_pages: 1 })
+      const results = (data.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
+      return json({ results, total_pages: 5 })
     }
 
     // Movies / TV — TMDB weekly trending
-    const res  = await fetch(`${TMDB_BASE}/trending/${mediaType}/week?api_key=${apiKey}&page=${page}&language=en-US`)
+    const genreId = genre ? TMDB_GENRES[genre] : null
+    const tmdbUrl = genreId
+      ? `${TMDB_BASE}/discover/${mediaType}?api_key=${apiKey}&page=${page}&language=en-US&include_adult=false&sort_by=popularity.desc&with_genres=${genreId}`
+      : `${TMDB_BASE}/trending/${mediaType}/week?api_key=${apiKey}&page=${page}&language=en-US`
+    const res  = await fetch(tmdbUrl)
     const data = await res.json()
     const results = (data.results ?? [])
       .filter((r: any) => r.poster_path)

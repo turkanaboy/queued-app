@@ -138,7 +138,7 @@ export function Chip({ active, children, onClick, disabled = false }) {
   )
 }
 
-export function MediumTabs({ value, onChange, counts = {} }) {
+export function MediumTabs({ value, onChange, counts = {}, showCounts = true }) {
   return (
     <div className="mx-[18px] flex gap-1 rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(8,46,32,0.72)] p-[3px]">
       {MEDIA_ORDER.map(type => {
@@ -148,7 +148,7 @@ export function MediumTabs({ value, onChange, counts = {} }) {
             className={`btn-press flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[14px] border px-1 py-2 transition-all ${active ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-transparent text-[#F4E9D1]'}`}>
             <MediaGlyph type={type} color={active ? C.ink : C.cream} />
             <span className="text-[11px] font-bold leading-none">{MEDIA[type].label}</span>
-            <span className={`font-mono-q text-[9.5px] font-semibold leading-none ${active ? 'text-[#052016]/60' : 'text-[rgba(214,240,224,0.5)]'}`}>{counts[type] ?? 0}</span>
+            {showCounts && <span className={`font-mono-q text-[9.5px] font-semibold leading-none ${active ? 'text-[#052016]/60' : 'text-[rgba(214,240,224,0.5)]'}`}>{counts[type] ?? 0}</span>}
           </button>
         )
       })}

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
-import { EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle } from '../lib/queuedDesign'
+import { RecommendationSheet, ProviderRows } from './AddRecommendationPage'
+import { TASTE_GENRE_GROUPS } from '../lib/taste'
+import { Chip, EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle, SearchField, SheetShell } from '../lib/queuedDesign'
 
 async function searchMedia(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -13,8 +15,13 @@ async function searchMedia(path) {
   return res.json()
 }
 
-async function fetchTrending(mediaType, page = 1) {
-  return searchMedia(`?action=trending&media_type=${mediaType}&page=${page}`)
+async function fetchTrending(mediaType, page = 1, genre = 'all') {
+  const genreParam = genre === 'all' ? '' : `&genre=${encodeURIComponent(genre)}`
+  return searchMedia(`?action=trending&media_type=${mediaType}&page=${page}${genreParam}`)
+}
+
+function mediaKey(item) {
+  return `${item.media_type}:${item.media_id}`
 }
 
 export default function CollectionPage() {
@@ -25,22 +32,29 @@ export default function CollectionPage() {
   const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
   const [logMap, setLogMap] = useState({})
   const [ratingItem, setRatingItem] = useState(null)
+  const [actionItem, setActionItem] = useState(null)
+  const [recommendItem, setRecommendItem] = useState(null)
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState([])
+  const [genre, setGenre] = useState('all')
+  const searchDebounceRef = useRef(null)
 
   useEffect(() => {
-    MEDIA_ORDER.forEach(type => loadSection(type, 1))
+    MEDIA_ORDER.forEach(type => loadSection(type, 1, 'all'))
     fetchUserLog()
   }, [session])
 
   async function fetchUserLog() {
     const { data } = await supabase.from('user_media_log').select('*').eq('user_id', session.user.id)
     const map = {}
-    for (const entry of data ?? []) map[entry.media_id] = entry
+    for (const entry of data ?? []) map[mediaKey(entry)] = entry
     setLogMap(map)
   }
 
-  async function loadSection(mediaType, page) {
+  async function loadSection(mediaType, page, nextGenre = genre) {
     setLoading(prev => ({ ...prev, [mediaType]: true }))
-    const json = await fetchTrending(mediaType, page)
+    const json = await fetchTrending(mediaType, page, nextGenre)
     setItems(prev => {
       const next = page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])]
       return { ...prev, [mediaType]: [...new Map(next.map(item => [item.media_id, item])).values()] }
@@ -49,9 +63,19 @@ export default function CollectionPage() {
     setLoading(prev => ({ ...prev, [mediaType]: false }))
   }
 
+  async function fetchProviders(item) {
+    if (!['movie', 'tv'].includes(item.media_type)) return []
+    return (await searchMedia(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)).providers ?? []
+  }
+
   async function handleQueue(item) {
+    const providers = await fetchProviders(item)
+    await upsertLog(item, 'queued', null, null, providers)
+  }
+
+  async function upsertLog(item, status, rating = null, review = null, providersOverride) {
     const providers = ['movie', 'tv'].includes(item.media_type)
-      ? (await searchMedia(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)).providers ?? []
+      ? providersOverride ?? (await fetchProviders(item))
       : []
     await supabase.from('user_media_log').upsert({
       user_id: session.user.id,
@@ -60,36 +84,82 @@ export default function CollectionPage() {
       media_title: item.media_title,
       media_creator: item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
-      rating: null,
-      status: 'queued',
+      rating,
+      status,
+      review,
       source_type: 'self',
       streaming_providers: providers,
-    }, { onConflict: 'user_id,media_id' })
+    }, { onConflict: 'user_id,media_type,media_id' })
     fetchUserLog()
   }
 
-  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, items[type]?.length ?? 0]))
-  const activeItems = items[medium] ?? []
-  const queued = Object.values(logMap).filter(item => item.media_type === medium && !item.rating)
+  async function openLogSheet(item) {
+    const providers = await fetchProviders(item)
+    setRatingItem({ ...item, streaming_providers: providers })
+  }
+
+  function changeMedium(next) {
+    setMedium(next)
+    setQuery('')
+    setSearchResults([])
+    setGenre('all')
+    if (!items[next]?.length) loadSection(next, 1, 'all')
+  }
+
+  function changeGenre(nextGenre) {
+    setGenre(nextGenre)
+    setQuery('')
+    setSearchResults([])
+    loadSection(medium, 1, nextGenre)
+  }
+
+  function handleSearch(q) {
+    setQuery(q)
+    clearTimeout(searchDebounceRef.current)
+    if (q.length < 2) {
+      setSearchResults([])
+      return
+    }
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      const json = await searchMedia(`?query=${encodeURIComponent(q)}&type=${medium}`)
+      setSearchResults(json.results ?? [])
+      setSearching(false)
+    }, 350)
+  }
+
+  const activeItems = query.length >= 2 ? searchResults : (items[medium] ?? [])
+  const queued = Object.values(logMap).filter(item => item.media_type === medium && item.status === 'queued')
+  const genreOptions = useMemo(() => {
+    const group = TASTE_GENRE_GROUPS.find(g => g.key === medium)
+    return group?.genres ?? []
+  }, [medium])
 
   return (
     <div className="pb-5">
       <ScreenHeader title="Discover" subtitle="Find what to queue or mark finished" />
-      <MediumTabs value={medium} counts={counts} onChange={setMedium} />
+      <MediumTabs value={medium} onChange={changeMedium} showCounts={false} />
 
       <div className="space-y-5 px-[18px] pt-4">
+        <SearchField value={query} onChange={handleSearch} placeholder={`Search ${medium === 'tv' ? 'TV' : medium === 'album' ? 'albums' : `${medium}s`}...`} />
+        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+          <Chip active={genre === 'all'} onClick={() => changeGenre('all')}>All genres</Chip>
+          {genreOptions.map(option => (
+            <Chip key={option} active={genre === option} onClick={() => changeGenre(option)}>{option}</Chip>
+          ))}
+        </div>
         <div className="flex items-center justify-between">
           <div className="flex gap-4 text-[11px] font-bold text-[rgba(214,240,224,0.7)]">
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#2DD48F]" />In your queue</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#D8A84A]" />Rated</span>
           </div>
-          <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
+          <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium] || query.length >= 2}
             className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">
             {loading[medium] ? '...' : 'Load more'}
           </button>
         </div>
 
-        {loading[medium] && activeItems.length === 0 ? (
+        {(loading[medium] || searching) && activeItems.length === 0 ? (
           <div className="grid grid-cols-3 gap-3">
             {[...Array(9)].map((_, i) => <div key={i} className="h-[120px] animate-pulse rounded-xl bg-white/10" />)}
           </div>
@@ -97,13 +167,13 @@ export default function CollectionPage() {
           <>
             <div className="grid grid-cols-3 gap-3">
               {activeItems.map(item => (
-                <DiscoverCard key={item.media_id} item={item} logEntry={logMap[item.media_id]} onTap={() => setRatingItem(item)} onQueue={() => handleQueue(item)} />
+              <DiscoverCard key={mediaKey(item)} item={item} logEntry={logMap[mediaKey(item)]} onTap={() => setActionItem(item)} onQueue={() => handleQueue(item)} />
               ))}
             </div>
-            <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
+            {query.length < 2 && <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
               className="btn-press btn-outline-cream w-full rounded-2xl py-3 text-sm font-bold disabled:opacity-40">
               {loading[medium] ? 'Loading...' : 'Load more'}
-            </button>
+            </button>}
           </>
         )}
 
@@ -130,8 +200,48 @@ export default function CollectionPage() {
         </section>
       </div>
 
-      {ratingItem && <RatingModal item={ratingItem} existingEntry={logMap[ratingItem.media_id]} onClose={() => setRatingItem(null)} onSaved={fetchUserLog} />}
+      {actionItem && (
+        <DiscoverActionSheet
+          item={actionItem}
+          logEntry={logMap[mediaKey(actionItem)]}
+          onClose={() => setActionItem(null)}
+          onLog={() => {
+            setActionItem(null)
+            openLogSheet(actionItem)
+          }}
+          onRecommend={() => {
+            setRecommendItem(actionItem)
+            setActionItem(null)
+          }}
+        />
+      )}
+      {ratingItem && <RatingModal item={ratingItem} existingEntry={logMap[mediaKey(ratingItem)] ?? ratingItem} onClose={() => setRatingItem(null)} onSaved={() => { fetchUserLog(); setRatingItem(null) }} />}
+      {recommendItem && <RecommendationSheet initialItem={recommendItem} onClose={() => setRecommendItem(null)} />}
     </div>
+  )
+}
+
+function DiscoverActionSheet({ item, logEntry, onClose, onLog, onRecommend }) {
+  return (
+    <SheetShell onClose={onClose} title={item.media_title} size="peek">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
+          <PosterTile item={item} w={52} h={76} radius={12} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title}</p>
+            <p className="mt-1 truncate text-xs text-[rgba(214,240,224,0.5)]">{item.media_creator || item.media_type}{item.year ? ` · ${item.year}` : ''}</p>
+            {logEntry && <p className="mt-2 text-[11px] font-semibold text-[#D8A84A]">Already in your collection</p>}
+          </div>
+        </div>
+        {logEntry?.streaming_providers && (
+          <ProviderRows providers={logEntry.streaming_providers} title={item.media_title} creator={item.media_creator} mediaType={item.media_type} compact />
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onRecommend} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">Recommend</button>
+          <button onClick={onLog} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold">Add to log</button>
+        </div>
+      </div>
+    </SheetShell>
   )
 }
 

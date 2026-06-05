@@ -19,7 +19,7 @@ export default function Layout() {
             <FriendsIcon />
           </TabItem>
 
-          <TabItem to="/queued" label="Queued Up">
+          <TabItem to="/queued" label="Queued">
             <ListIcon />
           </TabItem>
 

@@ -157,7 +157,7 @@ export default function ProfilePage() {
         source_type: 'recommendation',
         source_user_id: item.origin_user_id,
         streaming_providers: item.streaming_providers ?? [],
-      }, { onConflict: 'user_id,media_id' })
+      }, { onConflict: 'user_id,media_type,media_id' })
     }
     fetchRecommendationQueue()
     fetchMediaLog()
@@ -474,7 +474,7 @@ function HeroStats({ medium, total, finished, avg, fromFriends, statusCounts, st
           <span className="absolute left-1 top-1 h-16 w-16 rounded-full bg-[radial-gradient(circle,rgba(45,212,143,0.32),transparent_68%)] blur" />
           <span className="font-mono-q relative text-4xl font-semibold text-[#F7F1E4]">{total}</span>
         </div>
-        <p className="mt-1 text-[13px] font-semibold text-[rgba(214,240,224,0.72)]">in your {MEDIA[medium].singular} queue</p>
+        <p className="mt-1 text-[13px] font-semibold text-[rgba(214,240,224,0.72)]">in your {MEDIA[medium].singular} collection</p>
         <div className="mt-4 flex gap-4">
           <MiniStat value={finished} label="Finished" color={C.mint} />
           <MiniStat value={avg ?? '--'} label="Avg" color={C.gold} prefix="★ " />

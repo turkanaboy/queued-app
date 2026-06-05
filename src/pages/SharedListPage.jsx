@@ -53,7 +53,7 @@ export default function SharedListPage() {
       status,
       source_type: 'recommendation',
       source_user_id: rec.sender_id,
-    }, { onConflict: 'user_id,media_id' })
+    }, { onConflict: 'user_id,media_type,media_id' })
   }
 
   async function updateStatus(recId, status, rec) {
@@ -76,7 +76,7 @@ export default function SharedListPage() {
         status: 'finished',
         source_type: 'recommendation',
         source_user_id: rec.sender_id,
-      }, { onConflict: 'user_id,media_id' })
+      }, { onConflict: 'user_id,media_type,media_id' })
     }
     fetchRecs()
   }

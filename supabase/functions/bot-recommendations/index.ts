@@ -123,7 +123,7 @@ async function upsertRecommendationLog(supabase: any, recommendation: any, userI
       source_user_id: recommendation.sender_id ?? BOT_USER_ID,
       streaming_providers: recommendation.streaming_providers ?? [],
       created_at: recommendation.created_at,
-    }, { onConflict: 'user_id,media_id' })
+    }, { onConflict: 'user_id,media_type,media_id' })
 }
 
 serve(async (req) => {

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
+import { ratingLabel, stepToRating } from '../lib/ratings'
 
 const TYPE_OPTIONS = ['multi', ...MEDIA_ORDER]
 const PLACEHOLDERS = {
@@ -20,7 +21,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [searching, setSearching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [rating, setRating] = useState(null)
+  const [ratingStep, setRatingStep] = useState(null)
   const [review, setReview] = useState('')
   const debounceRef = useRef(null)
 
@@ -76,12 +77,12 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       media_title: selected.media_title,
       media_creator: selected.media_creator ?? null,
       media_poster_url: selected.media_poster_url,
-      rating: status === 'finished' ? rating : null,
+      rating: status === 'finished' ? stepToRating(ratingStep) : null,
       status,
       review: status === 'finished' ? (review.trim() || null) : null,
       source_type: 'self',
       streaming_providers: providers ?? [],
-    }, { onConflict: 'user_id,media_id' })
+    }, { onConflict: 'user_id,media_type,media_id' })
     if (error) { setError(error.message); setSaving(false); return }
     onSaved?.()
     onClose()
@@ -119,19 +120,19 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-extrabold text-[#F7F1E4]">{selected.media_title}</p>
               <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">{selected.media_creator || selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
-              <button onClick={() => setSelected(null)} className="btn-press mt-1 text-xs font-bold text-[#D8A84A]">← Pick another</button>
+              <button onClick={() => { setSelected(null); setRatingStep(null); setReview('') }} className="btn-press mt-1 text-xs font-bold text-[#D8A84A]">Pick another</button>
             </div>
           </div>
           <div>
             <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Optional rating</p>
             <div className="grid grid-cols-10 gap-1.5">
-              {[1,2,3,4,5,6,7,8,9,10].map(n => {
-                const active = rating && n <= rating
+            {[1,2,3,4,5,6,7,8,9,10].map(n => {
+                const active = ratingStep && n <= ratingStep
                 return (
-                  <button key={n} onClick={() => setRating(rating === n ? null : n)}
+                  <button key={n} onClick={() => setRatingStep(ratingStep === n ? null : n)}
                     className={`font-mono-q btn-press h-[30px] rounded-[7px] text-[11px] font-semibold ${active ? 'text-[#052016]' : 'text-[rgba(214,240,224,0.55)]'}`}
                     style={{ background: active ? 'linear-gradient(180deg, #E7C674, #C99A52)' : 'rgba(2,17,12,0.5)', boxShadow: active ? 'none' : 'inset 0 1px 0 rgba(244,233,209,0.08)' }}>
-                    {n}
+                    {ratingLabel(n)}
                   </button>
                 )
               })}

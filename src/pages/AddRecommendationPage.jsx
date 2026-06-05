@@ -24,15 +24,15 @@ export default function AddRecommendationPage() {
   )
 }
 
-export function RecommendationSheet({ onClose }) {
+export function RecommendationSheet({ onClose, initialItem }) {
   return (
     <SheetShell onClose={onClose} title="Recommend" size="peek">
-      <RecommendationComposer compact onDone={onClose} />
+      <RecommendationComposer compact onDone={onClose} initialItem={initialItem} />
     </SheetShell>
   )
 }
 
-function RecommendationComposer({ compact = false, onDone }) {
+function RecommendationComposer({ compact = false, onDone, initialItem = null }) {
   const { session } = useAuth()
   const navigate = useNavigate()
   const [searchType, setSearchType] = useState('multi')
@@ -102,6 +102,10 @@ function RecommendationComposer({ compact = false, onDone }) {
     const json = await mediaCall(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)
     setProviders(json.providers ?? null)
   }
+
+  useEffect(() => {
+    if (initialItem) selectTitle(initialItem)
+  }, [initialItem])
 
   function toggleFriend(friendship) {
     setSelectedFriends(prev =>

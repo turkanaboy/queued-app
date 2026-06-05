@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
 import { ProviderRows } from './AddRecommendationPage'
-import { EmptyState, MEDIA, PosterTile, ScreenHeader } from '../lib/queuedDesign'
+import { EmptyState, MEDIA, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader } from '../lib/queuedDesign'
 
 export default function QueuedUpPage() {
   const { session } = useAuth()
   const [items, setItems] = useState([])
+  const [medium, setMedium] = useState('movie')
   const [loading, setLoading] = useState(true)
   const [ratingItem, setRatingItem] = useState(null)
 
@@ -30,7 +31,8 @@ export default function QueuedUpPage() {
 
   return (
     <div className="pb-5">
-      <ScreenHeader title="Queued Up" subtitle="Everything waiting in your queue" />
+      <ScreenHeader title="Queued" subtitle="Everything waiting in your queue" />
+      <MediumTabs value={medium} counts={Object.fromEntries(MEDIA_ORDER.map(type => [type, items.filter(item => item.media_type === type).length]))} onChange={setMedium} />
 
       <div className="px-[18px] pt-2">
         <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
@@ -46,10 +48,10 @@ export default function QueuedUpPage() {
                 </div>
               ))}
             </div>
-          ) : items.length === 0 ? (
+          ) : items.filter(item => item.media_type === medium).length === 0 ? (
             <EmptyState title="Your queue is clear" body="Tap the plus button to add something you want to watch, read, or hear." />
           ) : (
-            items.map((item, index) => (
+            items.filter(item => item.media_type === medium).map((item, index) => (
               <div key={item.id} className={`flex items-start gap-3 px-[13px] py-[11px] ${index ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
                 <PosterTile item={item} w={34} h={52} radius={8} />
                 <div className="min-w-0 flex-1">
