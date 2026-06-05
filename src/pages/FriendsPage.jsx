@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
+import { EmptyState, PageHeader, SectionTitle } from '../components/DesignPrimitives'
 
 export default function FriendsPage() {
   const { session } = useAuth()
@@ -70,19 +71,14 @@ export default function FriendsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="anim-scale">
-        <h1 className="text-3xl font-extrabold text-white">Friends</h1>
-        <p className="text-white/50 text-sm mt-0.5">Find people & see their recommendations</p>
-      </div>
+    <div className="space-y-6 pb-4">
+      <PageHeader title="Friends" subtitle="Find people, accept requests, and jump into shared lists." />
 
-      {/* Search */}
-      <div className="anim-up">
+      <div className="anim-up space-y-2">
         <div className="relative">
-          <svg className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/>
-            <path d="m21 21-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D6F0E0]/50" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" />
+            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
           <input
             type="text"
@@ -94,20 +90,15 @@ export default function FriendsPage() {
         </div>
 
         {searchResults.length > 0 && (
-          <div className="glass rounded-2xl mt-2 overflow-hidden">
-            {searchResults.map(u => (
-              <div key={u.id} className="flex items-center justify-between px-4 py-3 border-b border-white/10 last:border-0">
-                <div className="flex items-center gap-3">
-                  <InitialsAvatar name={u.display_name || u.username} size="sm" />
-                  <div>
-                    <p className="text-sm font-bold text-white">{u.display_name || u.username}</p>
-                    <p className="text-xs text-white/50">@{u.username}</p>
-                  </div>
+          <div className="q-panel-spine overflow-hidden rounded-[18px]">
+            {searchResults.map((u, i) => (
+              <div key={u.id} className={`q-row flex items-center gap-3 px-3.5 py-3 ${i === 0 ? '' : ''}`}>
+                <InitialsAvatar name={u.display_name || u.username} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-[#F7F1E4]">{u.display_name || u.username}</p>
+                  <p className="font-mono text-[11px] text-[#D6F0E0]/50">@{u.username}</p>
                 </div>
-                <button
-                  onClick={() => sendRequest(u.id)}
-                  className="btn-press btn-cream text-xs font-bold px-4 py-1.5 rounded-full"
-                >
+                <button onClick={() => sendRequest(u.id)} className="btn-press btn-cream rounded-full px-4 py-1.5 text-xs font-extrabold">
                   Add
                 </button>
               </div>
@@ -116,28 +107,23 @@ export default function FriendsPage() {
         )}
       </div>
 
-      {/* Incoming requests */}
       {incoming.length > 0 && (
         <section className="anim-up">
-          <SectionLabel>Requests · {incoming.length}</SectionLabel>
-          <div className="space-y-2 mt-3">
+          <SectionTitle count={incoming.length}>Requests</SectionTitle>
+          <div className="space-y-2">
             {incoming.map(f => (
-              <div key={f.id} className="queue-strip rounded-[22px] px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
-                  <div>
-                    <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
-                    <p className="text-xs text-white/50">@{f.friend?.username}</p>
-                  </div>
+              <div key={f.id} className="flex items-center gap-3 rounded-[18px] border border-[#2DD48F]/25 bg-[#2DD48F]/[0.08] px-3.5 py-3 shadow-[inset_2px_0_0_rgba(45,212,143,0.5)]">
+                <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-[#F7F1E4]">{f.friend?.display_name || f.friend?.username}</p>
+                  <p className="font-mono text-[11px] text-[#D6F0E0]/50">@{f.friend?.username}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => acceptRequest(f.id)}
-                    className="btn-press btn-cream text-xs font-bold px-3 py-1.5 rounded-full">
-                    Accept
-                  </button>
-                  <button onClick={() => declineRequest(f.id)}
-                    className="btn-press btn-outline-cream text-xs font-semibold px-3 py-1.5 rounded-full">
+                  <button onClick={() => declineRequest(f.id)} className="btn-press rounded-full border border-[#96D6B4]/20 bg-[#092E20]/70 px-3 py-1.5 text-xs font-bold text-[#D6F0E0]/70">
                     Decline
+                  </button>
+                  <button onClick={() => acceptRequest(f.id)} className="btn-press btn-cream rounded-full px-3 py-1.5 text-xs font-extrabold">
+                    Accept
                   </button>
                 </div>
               </div>
@@ -146,36 +132,25 @@ export default function FriendsPage() {
         </section>
       )}
 
-      {/* Friends list */}
-      <section>
-        <SectionLabel>Friends {friends.length > 0 && `· ${friends.length}`}</SectionLabel>
+      <section className="anim-up">
+        <SectionTitle count={friends.length}>Your friends</SectionTitle>
         {loading ? (
-          <p className="text-white/40 text-sm mt-3">Loading…</p>
+          <p className="text-sm text-[#D6F0E0]/45">Loading…</p>
         ) : friends.length === 0 ? (
-          <div className="queue-strip rounded-[22px] p-6 text-center mt-3">
-            <p className="text-3xl mb-2">👋</p>
-            <p className="text-white/60 text-sm">No friends yet — search above to add someone.</p>
-          </div>
+          <EmptyState title="No friends yet" body="Search for someone by username to add them." />
         ) : (
-          <div className="space-y-2 mt-3">
-            {friends.map((f, i) => (
-              <div key={f.id} className={`queue-strip rounded-[22px] px-4 py-3 flex items-center justify-between anim-up`}
-                style={{ animationDelay: `${i * 50}ms` }}>
-                <button
-                  onClick={() => navigate(`/profile/${f.friend.id}`)}
-                  className="flex items-center gap-3 text-left"
-                >
+          <div className="q-panel-spine overflow-hidden rounded-[18px]">
+            {friends.map(f => (
+              <div key={f.id} className="q-row flex items-center gap-3 px-3.5 py-3">
+                <button onClick={() => navigate(`/profile/${f.friend.id}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                   <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
-                  <div>
-                    <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
-                    <p className="text-xs text-white/50">@{f.friend?.username}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[#F7F1E4]">{f.friend?.display_name || f.friend?.username}</p>
+                    <p className="font-mono text-[11px] text-[#D6F0E0]/50">@{f.friend?.username}</p>
                   </div>
                 </button>
-                <button
-                  onClick={() => navigate(`/list/${f.friend.id}`)}
-                  className="btn-press btn-outline-cream text-xs font-bold px-4 py-1.5 rounded-full"
-                >
-                  View list
+                <button onClick={() => navigate(`/list/${f.friend.id}`)} className="btn-press rounded-full border border-[#96D6B4]/20 bg-[#092E20]/70 px-4 py-1.5 text-xs font-bold text-[#F7F1E4]">
+                  List
                 </button>
               </div>
             ))}
@@ -183,17 +158,16 @@ export default function FriendsPage() {
         )}
       </section>
 
-      {/* Pending sent */}
       {pending.length > 0 && (
-        <section>
-          <SectionLabel>Sent requests</SectionLabel>
-          <div className="space-y-2 mt-3">
+        <section className="anim-up">
+          <SectionTitle>Sent requests</SectionTitle>
+          <div className="space-y-2">
             {pending.map(f => (
-              <div key={f.id} className="queue-strip rounded-[22px] px-4 py-3 flex items-center gap-3 opacity-60">
-                <InitialsAvatar name={f.friend?.display_name || f.friend?.username} />
+              <div key={f.id} className="q-panel flex items-center gap-3 rounded-2xl px-3.5 py-3 opacity-65">
+                <InitialsAvatar name={f.friend?.display_name || f.friend?.username} size="sm" />
                 <div>
-                  <p className="text-sm font-bold text-white">{f.friend?.display_name || f.friend?.username}</p>
-                  <p className="text-xs text-white/50">Pending…</p>
+                  <p className="text-sm font-bold text-[#F7F1E4]">{f.friend?.display_name || f.friend?.username}</p>
+                  <p className="font-mono text-[11px] text-[#D6F0E0]/50">Pending…</p>
                 </div>
               </div>
             ))}
@@ -201,11 +175,5 @@ export default function FriendsPage() {
         </section>
       )}
     </div>
-  )
-}
-
-function SectionLabel({ children }) {
-  return (
-    <p className="text-white/50 text-xs font-bold uppercase tracking-widest">{children}</p>
   )
 }

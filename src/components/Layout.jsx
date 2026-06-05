@@ -1,9 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
 import { useUnreadCount } from '../hooks/useUnreadCount'
 
 export default function Layout() {
-  const { profile } = useAuth()
   const unreadCount = useUnreadCount()
 
   return (
