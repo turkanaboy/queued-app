@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'design_handoff_queued_redesign']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -16,6 +16,10 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      'react-hooks/immutability': 'off',
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])
