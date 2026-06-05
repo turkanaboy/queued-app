@@ -72,6 +72,7 @@ export default function CollectionPage() {
       media_creator:    item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
       rating:           null,
+      status:           'queued',
       source_type:      'self',
     }, { onConflict: 'user_id,media_id' })
     fetchUserLog()

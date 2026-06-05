@@ -24,10 +24,32 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
       media_creator:    item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
       rating,
+      status:           'finished',
       // When skipping, preserve any existing review rather than wiping it
       review: withComment
         ? (comment.trim() || null)
         : (existingEntry?.review ?? null),
+      source_type:      existingEntry?.source_type ?? 'self',
+      source_user_id:   existingEntry?.source_user_id ?? null,
+    }, { onConflict: 'user_id,media_id' })
+    onSaved?.()
+    onClose()
+  }
+
+  async function addToQueue() {
+    setSaving(true)
+    await supabase.from('user_media_log').upsert({
+      user_id:          session.user.id,
+      media_type:       item.media_type,
+      media_id:         item.media_id,
+      media_title:      item.media_title,
+      media_creator:    item.media_creator ?? null,
+      media_poster_url: item.media_poster_url,
+      rating:           existingEntry?.rating ?? null,
+      status:           existingEntry?.status ?? 'queued',
+      review:           existingEntry?.review ?? null,
+      source_type:      existingEntry?.source_type ?? 'self',
+      source_user_id:   existingEntry?.source_user_id ?? null,
     }, { onConflict: 'user_id,media_id' })
     onSaved?.()
     onClose()
@@ -132,6 +154,14 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                   {saving ? 'Saving…' : 'Skip for now'}
                 </button>
               </div>
+            )}
+
+            {step === 'rate' && !rating && !existingEntry && (
+              <button onClick={addToQueue} disabled={saving}
+                className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
+                style={{ background: 'white' }}>
+                {saving ? 'Saving…' : 'Add to queue'}
+              </button>
             )}
 
             {/* Comment step */}

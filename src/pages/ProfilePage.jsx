@@ -7,6 +7,28 @@ import { PLATFORMS, platformInitials } from '../lib/platforms'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 
+const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
+const TYPE_ICON = { movie: '🎬', tv: '📺', book: '📚', album: '🎵' }
+const STATUS_OPTIONS = ['all', 'not_yet_viewed', 'queued', 'in_progress', 'skipped', 'bailed', 'finished']
+const ACTIVE_BOT_STATUSES = ['not_yet_viewed', 'queued', 'in_progress']
+const STATUS_LABELS = {
+  all: 'All',
+  not_yet_viewed: 'New',
+  queued: 'Queued',
+  in_progress: 'In progress',
+  skipped: 'Skipped',
+  bailed: 'Bailed',
+  finished: 'Finished',
+}
+const STATUS_COLORS = {
+  not_yet_viewed: 'bg-blue-400/30 text-blue-100',
+  queued: 'bg-sky-400/30 text-sky-100',
+  in_progress: 'bg-amber-400/30 text-amber-100',
+  skipped: 'bg-white/10 text-white/50',
+  bailed: 'bg-rose-400/30 text-rose-100',
+  finished: 'bg-green-400/30 text-green-100',
+}
+
 export default function ProfilePage() {
   const { userId } = useParams()
   const { session, refreshProfile } = useAuth()
@@ -18,6 +40,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
   const [mediaLog, setMediaLog] = useState([])
+  const [recommendationQueue, setRecommendationQueue] = useState([])
   const [activity, setActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [showLogSheet, setShowLogSheet] = useState(false)
@@ -29,11 +52,17 @@ export default function ProfilePage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
   const [saving, setSaving] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [originFilter, setOriginFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [botLoading, setBotLoading] = useState(false)
+  const [botMessage, setBotMessage] = useState('')
 
   useEffect(() => {
     fetchProfile()
     fetchStats()
     fetchMediaLog()
+    fetchRecommendationQueue()
     fetchActivity()
   }, [targetId])
 
@@ -67,6 +96,16 @@ export default function ProfilePage() {
     setMediaLog(data ?? [])
   }
 
+  async function fetchRecommendationQueue() {
+    const { data } = await supabase
+      .from('recommendations')
+      .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name)')
+      .eq('recipient_id', targetId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+    setRecommendationQueue(data ?? [])
+  }
+
   async function fetchActivity() {
     const { data } = await supabase
       .from('recommendations')
@@ -83,6 +122,72 @@ export default function ProfilePage() {
     await supabase.from('user_media_log').delete().eq('id', id)
     fetchMediaLog()
     fetchStats()
+  }
+
+  async function updateLogStatus(item, status) {
+    await supabase.from('user_media_log').update({
+      status,
+      rating: status === 'finished' ? item.rating : item.rating,
+    }).eq('id', item.id)
+    fetchMediaLog()
+    fetchStats()
+  }
+
+  async function updateRecommendationStatus(item, status) {
+    await supabase.from('recommendations').update({ recipient_status: status }).eq('id', item.recommendation_id)
+    if (status !== 'not_yet_viewed') {
+      await supabase.from('user_media_log').upsert({
+        user_id:          session.user.id,
+        media_type:       item.media_type,
+        media_id:         item.media_id,
+        media_title:      item.media_title,
+        media_creator:    item.media_creator ?? null,
+        media_poster_url: item.media_poster_url,
+        rating:           item.rating ?? null,
+        status,
+        source_type:      'recommendation',
+        source_user_id:   item.origin_user_id,
+      }, { onConflict: 'user_id,media_id' })
+    }
+    fetchRecommendationQueue()
+    fetchMediaLog()
+    fetchStats()
+  }
+
+  async function requestBotRecommendation() {
+    setBotLoading(true)
+    setBotMessage('')
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ user_id: session.user.id }),
+      }
+    )
+    const json = await res.json()
+
+    if (json.active) {
+      setBotMessage(`${json.recommendation?.media_title ?? 'Your current bot pick'} is still active.`)
+    } else if (json.sent) {
+      setBotMessage(`Queued Bot added ${json.recommendation?.media_title ?? 'a new pick'}.`)
+      setOriginFilter('recommendations')
+      setStatusFilter('all')
+    } else if (json.exhausted) {
+      setBotMessage('Queued Bot could not find a fresh pick yet.')
+    } else {
+      setBotMessage('Queued Bot checked in.')
+    }
+
+    await fetchRecommendationQueue()
+    await fetchMediaLog()
+    await fetchStats()
+    setBotLoading(false)
   }
 
   async function saveProfile() {
@@ -116,6 +221,55 @@ export default function ProfilePage() {
 
   if (loading) return <div className="flex items-center justify-center pt-20"><p className="text-white/40">Loading…</p></div>
   if (!profile) return <div className="flex items-center justify-center pt-20"><p className="text-white/40">User not found.</p></div>
+
+  const logByMediaId = new Map(mediaLog.map(item => [item.media_id, item]))
+  const personalItems = [
+    ...recommendationQueue.map(rec => {
+      const logEntry = logByMediaId.get(rec.media_id)
+      return {
+        id: logEntry?.id ?? `rec-${rec.id}`,
+        recommendation_id: rec.id,
+        item_kind: 'recommendation',
+        media_type: rec.media_type,
+        media_id: rec.media_id,
+        media_title: rec.media_title,
+        media_creator: rec.media_creator,
+        media_poster_url: rec.media_poster_url,
+        rating: rec.rating ?? logEntry?.rating ?? null,
+        review: logEntry?.review ?? null,
+        status: rec.recipient_status,
+        created_at: rec.created_at,
+        origin: rec.sender_id === BOT_USER_ID ? 'Recommended by Queued Bot' : `Recommended by ${rec.sender?.display_name || rec.sender?.username || 'friend'}`,
+        origin_type: 'recommendation',
+        origin_user_id: rec.sender_id,
+        origin_user: rec.sender,
+        source_type: 'recommendation',
+        source_user_id: rec.sender_id,
+      }
+    }),
+    ...mediaLog
+      .filter(item => !recommendationQueue.some(rec => rec.media_id === item.media_id))
+      .map(item => ({
+        ...item,
+        item_kind: 'log',
+        status: item.status ?? (item.rating ? 'finished' : 'queued'),
+        origin: item.source_type === 'recommendation' && item.source_user
+          ? `Recommended by ${item.source_user.display_name || item.source_user.username}`
+          : 'Added by you',
+        origin_type: item.source_type === 'recommendation' ? 'recommendation' : 'self',
+        origin_user_id: item.source_user_id,
+      })),
+  ].filter(item => {
+    if (originFilter === 'mine' && item.origin_type !== 'self') return false
+    if (originFilter === 'recommendations' && item.origin_type !== 'recommendation') return false
+    if (statusFilter !== 'all' && item.status !== statusFilter) return false
+    if (typeFilter !== 'all' && item.media_type !== typeFilter) return false
+    return true
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+  const activeBotRecommendation = recommendationQueue.find(rec =>
+    rec.sender_id === BOT_USER_ID && ACTIVE_BOT_STATUSES.includes(rec.recipient_status)
+  )
 
   return (
     <div className="space-y-6 pb-4">
@@ -197,84 +351,152 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* My Log */}
+      {/* Personal task list */}
       <section className="anim-up">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-white/50 text-xs font-bold uppercase tracking-widest">My Log</p>
+          <div>
+            <p className="text-white/50 text-xs font-bold uppercase tracking-widest">
+              {isOwnProfile ? 'My Queue' : 'Media list'}
+            </p>
+            {isOwnProfile && (
+              <p className="text-white/35 text-xs mt-1">Everything to watch, read, or listen to.</p>
+            )}
+          </div>
           {isOwnProfile && (
-            <button
-              onClick={() => setShowLogSheet(true)}
-              className="btn-press w-8 h-8 rounded-full flex items-center justify-center font-bold text-[#040C21] shadow-lg text-lg"
-              style={{ background: 'white' }}
-            >
-              +
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={requestBotRecommendation}
+                disabled={botLoading}
+                className="btn-press text-xs font-bold px-3 py-2 rounded-full border border-white/20 text-white/70 disabled:opacity-40"
+                style={{ background: activeBotRecommendation ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)' }}
+              >
+                {botLoading ? 'Thinking...' : activeBotRecommendation ? 'Bot waiting' : 'Ask Bot'}
+              </button>
+              <button
+                onClick={() => setShowLogSheet(true)}
+                className="btn-press w-8 h-8 rounded-full flex items-center justify-center font-bold text-[#040C21] shadow-lg text-lg"
+                style={{ background: 'white' }}
+              >
+                +
+              </button>
+            </div>
           )}
         </div>
 
-        {mediaLog.length === 0 ? (
+        {isOwnProfile && botMessage && (
+          <p className="text-white/45 text-xs mb-3">{botMessage}</p>
+        )}
+
+        {isOwnProfile && (
+          <div className="space-y-2 mb-3">
+            <FilterRow
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'mine', label: 'Mine' },
+                { value: 'recommendations', label: 'Recommendations' },
+              ]}
+              value={originFilter}
+              onChange={setOriginFilter}
+            />
+            <FilterRow
+              options={STATUS_OPTIONS.map(s => ({ value: s, label: STATUS_LABELS[s] }))}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+            <FilterRow
+              options={[
+                { value: 'all', label: 'All media' },
+                { value: 'movie', label: 'Movies' },
+                { value: 'tv', label: 'TV' },
+                { value: 'book', label: 'Books' },
+                { value: 'album', label: 'Albums' },
+              ]}
+              value={typeFilter}
+              onChange={setTypeFilter}
+            />
+          </div>
+        )}
+
+        {personalItems.length === 0 ? (
           <div className="glass rounded-3xl p-6 text-center">
             <p className="text-3xl mb-2">📋</p>
             <p className="text-white/40 text-sm">
-              {isOwnProfile ? 'Log movies and shows you\'ve watched' : 'Nothing logged yet'}
+              {isOwnProfile ? 'Nothing matches these filters yet.' : 'Nothing logged yet'}
             </p>
             {isOwnProfile && (
               <button onClick={() => setShowLogSheet(true)}
                 className="btn-press mt-3 text-xs font-bold px-4 py-2 rounded-full text-[#040C21]"
                 style={{ background: 'white' }}>
-                + Log something
+                + Add something
               </button>
             )}
           </div>
         ) : (
-          <div className="poster-scroll -mx-4 px-4">
-            {mediaLog.map(item => (
-              <div key={item.id} className="shrink-0 w-32 group relative">
-                <div
-                  className="relative rounded-2xl overflow-hidden shadow-lg cursor-pointer"
+          <div className="space-y-2.5">
+            {personalItems.map(item => (
+              <div key={`${item.item_kind}-${item.id}`} className="glass rounded-2xl p-3 flex gap-3">
+                <button
+                  className="relative shrink-0 rounded-xl overflow-hidden shadow-lg"
                   onClick={() => isOwnProfile && setEditingLogItem(item)}
                 >
                   {item.media_poster_url
-                    ? <img src={item.media_poster_url} className="w-32 h-44 object-cover" alt={item.media_title} />
-                    : <div className="w-32 h-44 flex items-center justify-center text-3xl"
-                        style={{ background: 'rgba(255,255,255,0.15)' }}>🎬</div>
+                    ? <img src={item.media_poster_url} className="w-14 h-20 object-cover" alt={item.media_title} />
+                    : <div className="w-14 h-20 flex items-center justify-center text-2xl"
+                        style={{ background: 'rgba(255,255,255,0.15)' }}>{TYPE_ICON[item.media_type] ?? '🎬'}</div>
                   }
-                  <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5"
-                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}>
-                    {item.rating ? (
-                      <div className="flex items-center gap-0.5">
-                        <span className="text-amber-300 text-xs">★</span>
-                        <span className="text-white text-xs font-bold">{item.rating}</span>
-                      </div>
-                    ) : (
-                      <span className="text-white/40 text-xs">🔖 Queued</span>
-                    )}
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-white text-sm font-extrabold truncate">{item.media_title}</p>
+                      <p className="text-white/45 text-xs capitalize mt-0.5 truncate">
+                        {TYPE_ICON[item.media_type] ?? '🎬'} {item.media_type}
+                        {item.media_creator ? ` · ${item.media_creator}` : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 text-[10px] px-2 py-1 rounded-full font-bold ${STATUS_COLORS[item.status] ?? 'bg-white/10 text-white/50'}`}>
+                      {STATUS_LABELS[item.status] ?? item.status}
+                    </span>
                   </div>
-                  {isOwnProfile && (
-                    <button
-                      onClick={e => { e.stopPropagation(); deleteLogEntry(item.id) }}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 text-white/70 hover:text-rose-300 text-xs items-center justify-center hidden group-hover:flex"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  {isOwnProfile && item.rating && (
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ background: 'rgba(0,0,0,0.4)' }}>
-                      <span className="text-white text-sm font-bold">Edit</span>
+
+                  <p className="text-white/40 text-xs mt-1.5 truncate">{item.origin}</p>
+
+                  {item.rating && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <span className="text-amber-300 text-xs">★</span>
+                      <span className="text-white/60 text-xs font-bold">{item.rating}</span>
                     </div>
                   )}
+
+                  {isOwnProfile && (
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <StatusSelect
+                        value={item.status}
+                        onChange={status => item.item_kind === 'recommendation'
+                          ? updateRecommendationStatus(item, status)
+                          : updateLogStatus(item, status)}
+                      />
+                      {item.item_kind === 'log' && (
+                        <button
+                          onClick={() => deleteLogEntry(item.id)}
+                          className="btn-press text-white/35 hover:text-rose-300 text-xs font-semibold px-2 py-1"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {isOwnProfile && item.item_kind === 'log' && item.rating && (
+                    <button
+                      onClick={() => setEditingLogItem(item)}
+                      className="btn-press text-white/45 hover:text-white text-xs font-semibold mt-1"
+                    >
+                      Edit rating
+                    </button>
+                  )}
                 </div>
-                <p className="text-white/70 text-xs font-semibold mt-1.5 truncate">{item.media_title}</p>
-                {item.source_type === 'recommendation' && item.source_user ? (
-                  <p className="text-white/35 text-[10px] mt-0.5 truncate">
-                    via {item.source_user.display_name || item.source_user.username}
-                  </p>
-                ) : (
-                  item.review && (
-                    <p className="text-white/30 text-[10px] mt-0.5 line-clamp-2 italic">"{item.review}"</p>
-                  )
-                )}
               </div>
             ))}
           </div>
@@ -405,5 +627,43 @@ function StatCard({ emoji, label, value }) {
       <p className="text-xl font-extrabold text-white">{value}</p>
       <p className="text-white/50 text-[10px] font-semibold mt-0.5">{label}</p>
     </div>
+  )
+}
+
+function FilterRow({ options, value, onChange }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+      {options.map(o => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`btn-press shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+            value === o.value
+              ? 'text-[#040C21] border-transparent'
+              : 'text-white/60 border-white/20 hover:border-white/40'
+          }`}
+          style={value === o.value ? { background: 'white' } : { background: 'rgba(255,255,255,0.1)' }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function StatusSelect({ value, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="btn-press text-xs font-bold text-white/70 border border-white/20 rounded-full px-2 py-1.5 outline-none"
+      style={{ background: 'rgba(255,255,255,0.1)' }}
+    >
+      {STATUS_OPTIONS.filter(s => s !== 'all').map(s => (
+        <option key={s} value={s} className="bg-[#0A1847] text-white">
+          {STATUS_LABELS[s]}
+        </option>
+      ))}
+    </select>
   )
 }

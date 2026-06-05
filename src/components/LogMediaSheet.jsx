@@ -67,7 +67,9 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       media_creator:    selected.media_creator ?? null,
       media_poster_url: selected.media_poster_url,
       rating,
+      status:           rating ? 'finished' : 'queued',
       review:           review.trim() || null,
+      source_type:      'self',
     }, { onConflict: 'user_id,media_id' })
 
     if (error) { setError(error.message); setSaving(false); return }
@@ -195,7 +197,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
               <button onClick={handleSave} disabled={saving}
                 className="btn-press w-full py-3.5 rounded-2xl font-bold text-[#040C21] text-sm disabled:opacity-40"
                 style={{ background: 'white' }}>
-                {saving ? 'Saving…' : 'Save to my collection 📝'}
+                {saving ? 'Saving…' : rating ? 'Save to my collection 📝' : 'Add to queue'}
               </button>
             </div>
           )}

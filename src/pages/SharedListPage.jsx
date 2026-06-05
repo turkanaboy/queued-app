@@ -50,8 +50,27 @@ export default function SharedListPage() {
     setLoading(false)
   }
 
-  async function updateStatus(recId, status) {
+  async function syncRecommendationToLog(rec, status, rating = rec.rating ?? null) {
+    if (!rec || rec.recipient_id !== session.user.id) return
+    if (status === 'not_yet_viewed' || status === 'skipped') return
+
+    await supabase.from('user_media_log').upsert({
+      user_id:          session.user.id,
+      media_type:       rec.media_type,
+      media_id:         rec.media_id,
+      media_title:      rec.media_title,
+      media_creator:    rec.media_creator ?? null,
+      media_poster_url: rec.media_poster_url,
+      rating,
+      status,
+      source_type:      'recommendation',
+      source_user_id:   rec.sender_id,
+    }, { onConflict: 'user_id,media_id' })
+  }
+
+  async function updateStatus(recId, status, rec) {
     await supabase.from('recommendations').update({ recipient_status: status }).eq('id', recId)
+    await syncRecommendationToLog(rec, status)
     fetchRecs()
   }
 
@@ -67,6 +86,7 @@ export default function SharedListPage() {
         media_creator:    rec.media_creator ?? null,
         media_poster_url: rec.media_poster_url,
         rating,
+        status:           'finished',
         source_type:      'recommendation',
         source_user_id:   rec.sender_id,
       }, { onConflict: 'user_id,media_id' })
@@ -148,7 +168,7 @@ export default function SharedListPage() {
               rec={rec}
               currentUserId={uid}
               myPlatforms={myPlatforms}
-              onStatusChange={updateStatus}
+              onStatusChange={(recId, status) => updateStatus(recId, status, rec)}
               onRatingChange={(recId, rating) => updateRating(recId, rating, rec)}
               onDelete={softDelete}
             />
