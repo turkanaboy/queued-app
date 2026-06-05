@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
-import { getProviderLink, getJustWatchLink, getBookLinks, getAlbumLinks } from '../lib/affiliates'
+import { getProviderLink, getBookLinks, getAlbumLinks } from '../lib/affiliates'
 
 async function tmdbCall(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -400,7 +400,7 @@ function ProviderSection({ label, providers, title, jwLink, myPlatforms = [], is
       <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide w-8 shrink-0">{label}</span>
       <div className="flex items-center gap-1.5 flex-wrap">
         {providers.map(p => (
-          <ProviderLogo key={p.provider_id} provider={p} title={title} link={getProviderLink(p, title, jwLink)}
+          <ProviderLogo key={p.provider_id} provider={p} link={getProviderLink(p, title, jwLink)}
             owned={isStream && myPlatforms.includes(p.provider_id)}
             hasOwnership={isStream && myPlatforms.length > 0} />
         ))}
@@ -409,7 +409,7 @@ function ProviderSection({ label, providers, title, jwLink, myPlatforms = [], is
   )
 }
 
-function ProviderLogo({ provider, title, link, owned, hasOwnership }) {
+function ProviderLogo({ provider, link, owned, hasOwnership }) {
   const img = provider.logo_path ? (
     <img src={provider.logo_path} alt={provider.provider_name} title={provider.provider_name}
       className="w-7 h-7 rounded-lg object-cover shadow"
