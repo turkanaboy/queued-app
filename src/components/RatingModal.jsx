@@ -1,200 +1,71 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { PosterTile, SheetShell } from '../lib/queuedDesign'
 
 const TYPE_LABEL = { movie: 'Movie', tv: 'TV', book: 'Book', album: 'Album' }
 
 export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   const { session } = useAuth()
   const [rating, setRating] = useState(existingEntry?.rating ?? null)
-  const [step, setStep] = useState(existingEntry ? 'rate' : 'choose')
   const [comment, setComment] = useState(existingEntry?.review ?? '')
   const [saving, setSaving] = useState(false)
 
-  const isAlbum = item.media_type === 'album'
-
-  async function save(withComment) {
+  async function save() {
     if (!rating) return
     setSaving(true)
     await supabase.from('user_media_log').upsert({
-      user_id:          session.user.id,
-      media_type:       item.media_type,
-      media_id:         item.media_id,
-      media_title:      item.media_title,
-      media_creator:    item.media_creator ?? null,
+      user_id: session.user.id,
+      media_type: item.media_type,
+      media_id: item.media_id,
+      media_title: item.media_title,
+      media_creator: item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
       rating,
-      status:           'finished',
-      review: withComment
-        ? (comment.trim() || null)
-        : (existingEntry?.review ?? null),
-      source_type:      existingEntry?.source_type ?? 'self',
-      source_user_id:   existingEntry?.source_user_id ?? null,
-    }, { onConflict: 'user_id,media_id' })
-    onSaved?.()
-    onClose()
-  }
-
-  async function addToQueue() {
-    setSaving(true)
-    await supabase.from('user_media_log').upsert({
-      user_id:          session.user.id,
-      media_type:       item.media_type,
-      media_id:         item.media_id,
-      media_title:      item.media_title,
-      media_creator:    item.media_creator ?? null,
-      media_poster_url: item.media_poster_url,
-      rating:           existingEntry?.rating ?? null,
-      status:           existingEntry?.status ?? 'queued',
-      review:           existingEntry?.review ?? null,
-      source_type:      existingEntry?.source_type ?? 'self',
-      source_user_id:   existingEntry?.source_user_id ?? null,
+      status: 'finished',
+      review: comment.trim() || null,
+      source_type: existingEntry?.source_type ?? 'self',
+      source_user_id: existingEntry?.source_user_id ?? null,
     }, { onConflict: 'user_id,media_id' })
     onSaved?.()
     onClose()
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="fixed inset-0 z-40 flex items-end justify-center pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-[430px] rounded-t-[32px] shadow-2xl pb-8"
-          style={{ background: 'linear-gradient(170deg, #02110C 0%, #062318 52%, #0B3B2A 100%)', border: '1px solid rgba(244,233,209,0.18)' }}>
-
-          <div className="pt-4 pb-2 flex justify-center">
-            <div className="w-10 h-1 bg-white/30 rounded-full" />
-          </div>
-
-          <div className="px-6 space-y-5">
-            <div className="flex items-center gap-4">
-              {item.media_poster_url ? (
-                <img src={item.media_poster_url} alt={item.media_title}
-                  className={`object-cover rounded-2xl shadow-lg shrink-0 ${isAlbum ? 'w-16 h-16' : 'w-14 h-20'}`} />
-              ) : (
-                <div className={`rounded-2xl flex items-center justify-center text-sm font-bold text-white/60 shrink-0 ${isAlbum ? 'w-16 h-16' : 'w-14 h-20'}`}
-                  style={{ background: 'rgba(255,255,255,0.15)' }}>
-                  {TYPE_LABEL[item.media_type] ?? 'Media'}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="font-extrabold text-white text-lg leading-tight">{item.media_title}</p>
-                {item.media_creator && (
-                  <p className="text-white/60 text-sm mt-0.5">{item.media_creator}</p>
-                )}
-                <p className="text-white/40 text-xs capitalize mt-0.5">
-                  {TYPE_LABEL[item.media_type] ?? item.media_type}{item.year ? ` · ${item.year}` : ''}
-                </p>
-                {existingEntry ? (
-                  <p className="text-white/40 text-xs mt-1">
-                    {existingEntry.rating ? 'Updating your finished log' : 'Queued - log it when finished'}
-                  </p>
-                ) : (
-                  <p className="text-white/40 text-xs mt-1">Queue it or log it as finished.</p>
-                )}
-              </div>
-              <button onClick={onClose} className="btn-press text-white/40 hover:text-white ml-auto shrink-0 p-1 text-xl">x</button>
-            </div>
-
-            {step === 'choose' && (
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={addToQueue} disabled={saving}
-                  className="btn-press btn-cream py-4 rounded-2xl font-bold text-sm disabled:opacity-40">
-                  {saving ? 'Saving...' : 'Add to queue'}
-                </button>
-                <button onClick={() => setStep('rate')}
-                  className="btn-press btn-outline-cream py-4 rounded-2xl font-bold text-sm">
-                  Rate / log
-                </button>
-              </div>
-            )}
-
-            {step !== 'choose' && (
-              <>
-                <div>
-                  <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Rating to mark finished</p>
-                  <div className="flex items-center justify-center gap-1">
-                    {[1, 2, 3, 4, 5].map(star => {
-                      const halfVal = star - 0.5
-                      const isFull = rating !== null && rating >= star
-                      const isHalf = rating !== null && !isFull && rating >= halfVal
-                      return (
-                        <div
-                          key={star}
-                          className="relative select-none"
-                          style={{ fontSize: '2.4rem', lineHeight: 1, width: '2.6rem', height: '2.6rem' }}
-                        >
-                          <span className="absolute inset-0 flex items-center justify-center text-white/20 pointer-events-none">
-                            ★
-                          </span>
-                          {(isFull || isHalf) && (
-                            <span
-                              className="absolute inset-0 flex items-center justify-center text-amber-300 pointer-events-none"
-                              style={isHalf ? { clipPath: 'inset(0 50% 0 0)' } : {}}
-                            >
-                              ★
-                            </span>
-                          )}
-                          <button
-                            className="absolute left-0 top-0 w-1/2 h-full btn-press"
-                            onClick={() => setRating(halfVal === rating ? null : halfVal)}
-                          />
-                          <button
-                            className="absolute right-0 top-0 w-1/2 h-full btn-press"
-                            onClick={() => setRating(star === rating ? null : star)}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {rating ? (
-                    <p className="text-center text-white/60 text-sm mt-2 font-semibold">{rating} / 5</p>
-                  ) : (
-                    <p className="text-center text-white/30 text-sm mt-2">Tap left half for 1/2, right half for full</p>
-                  )}
-                </div>
-
-                {step === 'rate' && rating && (
-                  <div className="flex gap-3 pt-1">
-                    <button onClick={() => setStep('comment')}
-                      className="btn-press btn-cream flex-1 py-3.5 rounded-2xl font-bold text-sm">
-                      Add comment
-                    </button>
-                    <button onClick={() => save(false)} disabled={saving}
-                      className="btn-press btn-outline-cream flex-1 py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
-                      {saving ? 'Saving...' : 'Log finished'}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {step === 'comment' && (
-              <div className="space-y-3">
-                <div className="relative">
-                  <textarea autoFocus value={comment}
-                    onChange={e => setComment(e.target.value.slice(0, 1000))}
-                    rows={3} placeholder="What did you think? (optional)"
-                    className="input-glass resize-none" />
-                  <span className={`absolute bottom-2 right-3 text-xs ${comment.length > 900 ? 'text-amber-300' : 'text-white/25'}`}>
-                    {comment.length}/1000
-                  </span>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => save(true)} disabled={saving}
-                    className="btn-press btn-cream flex-1 py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
-                    {saving ? 'Saving...' : 'Save finished log'}
-                  </button>
-                  <button onClick={() => save(false)} disabled={saving}
-                    className="btn-press btn-outline-cream py-3.5 px-4 rounded-2xl text-sm disabled:opacity-40">
-                    Log without comment
-                  </button>
-                </div>
-              </div>
-            )}
+    <SheetShell onClose={onClose} title="Rate & finish">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <PosterTile item={item} w={56} h={82} radius={14} />
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-extrabold leading-tight text-[#F7F1E4]">{item.media_title}</p>
+            <p className="mt-1 truncate text-sm text-[rgba(214,240,224,0.6)]">{item.media_creator || TYPE_LABEL[item.media_type]}{item.year ? ` · ${item.year}` : ''}</p>
           </div>
         </div>
+
+        <div>
+          <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Rating</p>
+          <div className="grid grid-cols-10 gap-1.5">
+            {[1,2,3,4,5,6,7,8,9,10].map(n => {
+              const active = rating && n <= rating
+              return (
+                <button key={n} onClick={() => setRating(rating === n ? null : n)}
+                  className={`font-mono-q btn-press h-[30px] rounded-[7px] text-[11px] font-semibold ${active ? 'text-[#052016]' : 'text-[rgba(214,240,224,0.55)]'}`}
+                  style={{ background: active ? 'linear-gradient(180deg, #E7C674, #C99A52)' : 'rgba(2,17,12,0.5)', boxShadow: active ? 'none' : 'inset 0 1px 0 rgba(244,233,209,0.08)' }}>
+                  {n}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <textarea value={comment} onChange={e => setComment(e.target.value.slice(0, 1000))} rows={3} placeholder="Review (optional)"
+          className="w-full resize-none rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] px-3.5 py-3 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
+
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onClose} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">Cancel</button>
+          <button onClick={save} disabled={!rating || saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Mark finished'}</button>
+        </div>
       </div>
-    </>
+    </SheetShell>
   )
 }

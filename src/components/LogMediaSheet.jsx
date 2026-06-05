@@ -1,23 +1,15 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
 
-const TYPE_OPTIONS = [
-  { value: 'multi', label: 'All' },
-  { value: 'movie', label: '🎬' },
-  { value: 'tv',    label: '📺' },
-  { value: 'book',  label: '📚' },
-  { value: 'album', label: '🎵' },
-]
-
+const TYPE_OPTIONS = ['multi', ...MEDIA_ORDER]
 const PLACEHOLDERS = {
-  multi: 'Search everything…',
-  movie: 'Search movies…',
-  tv:    'Search TV shows…',
-  book:  'Search books…',
-  album: 'Search albums…',
+  multi: 'Search everything...',
+  movie: 'Search movies...',
+  tv: 'Search TV shows...',
+  book: 'Search books...',
+  album: 'Search albums...',
 }
-
-const TYPE_ICON = { movie: '🎬', tv: '📺', book: '📚', album: '🎵' }
 
 export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [searchType, setSearchType] = useState('multi')
@@ -25,8 +17,6 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
   const [searching, setSearching] = useState(false)
-  const [rating, setRating] = useState(null)
-  const [review, setReview] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const debounceRef = useRef(null)
@@ -55,153 +45,69 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
     if (query.length >= 2) search(query, t)
   }
 
-  async function handleSave() {
+  async function handleSave(status) {
     if (!selected) return
     setSaving(true)
     setError('')
     const { error } = await supabase.from('user_media_log').upsert({
-      user_id:          userId,
-      media_type:       selected.media_type,
-      media_id:         selected.media_id,
-      media_title:      selected.media_title,
-      media_creator:    selected.media_creator ?? null,
+      user_id: userId,
+      media_type: selected.media_type,
+      media_id: selected.media_id,
+      media_title: selected.media_title,
+      media_creator: selected.media_creator ?? null,
       media_poster_url: selected.media_poster_url,
-      rating,
-      status:           rating ? 'finished' : 'queued',
-      review:           review.trim() || null,
-      source_type:      'self',
+      rating: null,
+      status,
+      review: null,
+      source_type: 'self',
     }, { onConflict: 'user_id,media_id' })
-
     if (error) { setError(error.message); setSaving(false); return }
     onSaved?.()
     onClose()
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 rounded-t-[32px] shadow-2xl"
-        style={{ background: 'linear-gradient(170deg, #02110C 0%, #062318 52%, #0B3B2A 100%)', border: '1px solid rgba(244,233,209,0.18)' }}>
-        <div className="px-5 pt-4 pb-8 space-y-4">
-          <div className="w-10 h-1 bg-white/30 rounded-full mx-auto" />
-
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-extrabold text-white">Log to my collection</h2>
-            <button onClick={onClose} className="text-white/50 hover:text-white text-xl p-1">✕</button>
+    <SheetShell onClose={onClose} title="Add title">
+      {!selected ? (
+        <div className="space-y-3">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto">
+            {TYPE_OPTIONS.map(type => <Chip key={type} active={searchType === type} onClick={() => changeType(type)}>{type === 'multi' ? 'All' : MEDIA[type].label}</Chip>)}
           </div>
-
-          {!selected ? (
-            <div className="space-y-3">
-              {/* Type filter pills */}
-              <div className="flex gap-2">
-                {TYPE_OPTIONS.map(t => (
-                  <button key={t.value} onClick={() => changeType(t.value)}
-                    className={`btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
-                      searchType === t.value
-                        ? 'text-[#052016] border-[#D8A84A]'
-                        : 'text-[#F4E9D1]/60 border-[#F4E9D1]/20'
-                    }`}
-                    style={{ background: searchType === t.value ? '#F4E9D1' : 'rgba(2,17,12,0.42)' }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Search */}
-              <div className="relative">
-                <svg className="absolute left-4 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle cx="11" cy="11" r="8" stroke="white" strokeWidth="2"/>
-                  <path d="m21 21-4.35-4.35" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                <input autoFocus type="text" value={query}
-                  onChange={e => search(e.target.value)}
-                  placeholder={PLACEHOLDERS[searchType]}
-                  className="input-glass input-search" />
-              </div>
-
-              {searching && <p className="text-white/40 text-xs text-center">Searching…</p>}
-
-              {results.length > 0 && (
-                <div className="glass rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
-                  {results.map(r => (
-                    <button key={r.media_id} onClick={() => { setSelected(r); setResults([]) }}
-                      className="btn-press flex items-center gap-3 w-full px-4 py-3 border-b border-white/10 last:border-0 text-left hover:bg-white/10">
-                      {r.media_poster_url
-                        ? <img src={r.media_poster_url}
-                            className={`object-cover rounded-lg shrink-0 ${r.media_type === 'album' ? 'w-10 h-10' : 'w-9 h-12'}`} alt="" />
-                        : <div className="w-9 h-12 rounded-lg shrink-0 text-xl flex items-center justify-center"
-                            style={{ background: 'rgba(255,255,255,0.1)' }}>
-                            {TYPE_ICON[r.media_type] ?? '🎬'}
-                          </div>
-                      }
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-white truncate">{r.media_title}</p>
-                        <p className="text-xs text-white/40 capitalize">
-                          {r.media_creator ? `${r.media_creator} · ` : ''}{r.media_type}{r.year ? ` · ${r.year}` : ''}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Selected */}
-              <div className="glass rounded-2xl flex items-center gap-3 px-4 py-3">
-                {selected.media_poster_url && (
-                  <img src={selected.media_poster_url}
-                    className={`object-cover rounded-xl shrink-0 ${selected.media_type === 'album' ? 'w-12 h-12' : 'w-10 h-14'}`} alt="" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{selected.media_title}</p>
-                  <p className="text-xs text-white/50">
-                    {selected.media_creator ? `${selected.media_creator} · ` : ''}{selected.media_type}{selected.year ? ` · ${selected.year}` : ''}
-                  </p>
-                </div>
-                <button onClick={() => { setSelected(null); setRating(null); setReview('') }}
-                  className="btn-press text-white/40 hover:text-white text-lg p-1">✕</button>
-              </div>
-
-              {/* Rating */}
-              <div>
-                <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2">Your rating</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {[0.5,1,1.5,2,2.5,3,3.5,4,4.5,5].map(v => (
-                    <button key={v} onClick={() => setRating(v === rating ? null : v)}
-                      className={`btn-press text-xl transition-transform ${rating && v <= rating ? 'text-amber-300 scale-110' : 'text-white/20'}`}>
-                      {v % 1 === 0 ? '★' : '½'}
-                    </button>
-                  ))}
-                  {rating && <span className="text-white/60 text-sm ml-1">{rating}</span>}
-                </div>
-              </div>
-
-              {/* Review */}
-              <div>
-                <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2">
-                  Review <span className="text-white/30 normal-case font-normal">(optional)</span>
-                </p>
-                <div className="relative">
-                  <textarea value={review} onChange={e => setReview(e.target.value.slice(0, 1000))}
-                    rows={3} placeholder="What did you think?" className="input-glass resize-none" />
-                  <span className={`absolute bottom-2 right-3 text-xs ${review.length > 900 ? 'text-amber-300' : 'text-white/25'}`}>
-                    {review.length}/1000
-                  </span>
-                </div>
-              </div>
-
-              {error && <p className="text-rose-300 text-sm">{error}</p>}
-
-              <button onClick={handleSave} disabled={saving}
-                className="btn-press btn-cream w-full py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40">
-                {saving ? 'Saving…' : rating ? 'Save to my collection 📝' : 'Add to queue'}
-              </button>
+          <SearchField autoFocus value={query} onChange={search} placeholder={PLACEHOLDERS[searchType]} />
+          {searching && <p className="text-center text-xs text-white/40">Searching...</p>}
+          {results.length > 0 && (
+            <div className="max-h-[280px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+              {results.map((r, i) => (
+                <button key={r.media_id} onClick={() => { setSelected(r); setResults([]) }}
+                  className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
+                  <PosterTile item={r} w={34} h={52} radius={8} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-[#F7F1E4]">{r.media_title}</p>
+                    <p className="truncate text-[11.5px] capitalize text-[rgba(214,240,224,0.5)]">{r.media_creator ? `${r.media_creator} · ` : ''}{r.media_type}{r.year ? ` · ${r.year}` : ''}</p>
+                  </div>
+                  <span className="text-xl text-[#D8A84A]">+</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </div>
-    </>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-3">
+            <PosterTile item={selected} w={44} h={64} radius={10} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-extrabold text-[#F7F1E4]">{selected.media_title}</p>
+              <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">{selected.media_creator || selected.media_type}{selected.year ? ` · ${selected.year}` : ''}</p>
+              <button onClick={() => setSelected(null)} className="btn-press mt-1 text-xs font-bold text-[#D8A84A]">← Pick another</button>
+            </div>
+          </div>
+          {error && <p className="text-sm text-rose-300">{error}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => handleSave('finished')} disabled={saving} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">I've finished it</button>
+            <button onClick={() => handleSave('queued')} disabled={saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Add to queue'}</button>
+          </div>
+        </div>
+      )}
+    </SheetShell>
   )
 }

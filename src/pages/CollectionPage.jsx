@@ -1,15 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
-import { IconBookmark, IconStar, PageHeader, TypeGlyph } from '../components/DesignPrimitives'
-
-const MEDIA_TYPES = [
-  { key: 'movie', label: 'Movies',   square: false },
-  { key: 'tv',    label: 'TV Shows', square: false },
-  { key: 'book',  label: 'Books',    square: false },
-  { key: 'album', label: 'Albums',   square: true  },
-]
+import { EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle } from '../lib/queuedDesign'
 
 async function fetchTrending(mediaType, page = 1) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -22,7 +15,7 @@ async function fetchTrending(mediaType, page = 1) {
 
 export default function CollectionPage() {
   const { session } = useAuth()
-
+  const [medium, setMedium] = useState('movie')
   const [items, setItems] = useState({ movie: [], tv: [], book: [], album: [] })
   const [pages, setPages] = useState({ movie: 1, tv: 1, book: 1, album: 1 })
   const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
@@ -30,18 +23,12 @@ export default function CollectionPage() {
   const [ratingItem, setRatingItem] = useState(null)
 
   useEffect(() => {
-    loadSection('movie', 1)
-    loadSection('tv', 1)
-    loadSection('book', 1)
-    loadSection('album', 1)
+    MEDIA_ORDER.forEach(type => loadSection(type, 1))
     fetchUserLog()
   }, [session])
 
   async function fetchUserLog() {
-    const { data } = await supabase
-      .from('user_media_log')
-      .select('media_id, rating, review')
-      .eq('user_id', session.user.id)
+    const { data } = await supabase.from('user_media_log').select('*').eq('user_id', session.user.id)
     const map = {}
     for (const entry of data ?? []) map[entry.media_id] = entry
     setLogMap(map)
@@ -50,157 +37,103 @@ export default function CollectionPage() {
   async function loadSection(mediaType, page) {
     setLoading(prev => ({ ...prev, [mediaType]: true }))
     const json = await fetchTrending(mediaType, page)
-    setItems(prev => ({
-      ...prev,
-      [mediaType]: page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])],
-    }))
+    setItems(prev => ({ ...prev, [mediaType]: page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])] }))
     setPages(prev => ({ ...prev, [mediaType]: page }))
     setLoading(prev => ({ ...prev, [mediaType]: false }))
   }
 
-  async function refresh(mediaType) {
-    const next = pages[mediaType] >= 5 ? 1 : pages[mediaType] + 1
-    loadSection(mediaType, next)
-  }
-
   async function handleQueue(item) {
     await supabase.from('user_media_log').upsert({
-      user_id:          session.user.id,
-      media_type:       item.media_type,
-      media_id:         item.media_id,
-      media_title:      item.media_title,
-      media_creator:    item.media_creator ?? null,
+      user_id: session.user.id,
+      media_type: item.media_type,
+      media_id: item.media_id,
+      media_title: item.media_title,
+      media_creator: item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
-      rating:           null,
-      status:           'queued',
-      source_type:      'self',
+      rating: null,
+      status: 'queued',
+      source_type: 'self',
     }, { onConflict: 'user_id,media_id' })
     fetchUserLog()
   }
 
-  function handleSaved() {
-    fetchUserLog()
-  }
+  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, items[type]?.length ?? 0]))
+  const activeItems = items[medium] ?? []
+  const queued = Object.values(logMap).filter(item => item.media_type === medium && !item.rating)
 
   return (
-    <div className="space-y-8 pb-4">
-      <PageHeader title="Discover" subtitle="Tabbed shelves for movies, TV, books, and albums worth adding to your queue." />
+    <div className="pb-5">
+      <ScreenHeader title="Discover" subtitle="Find what to queue or rate next" />
+      <MediumTabs value={medium} counts={counts} onChange={setMedium} />
 
-      {MEDIA_TYPES.map(({ key, label, square }) => (
-        <section key={key} className="anim-up">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-2 text-lg font-extrabold text-[#F7F1E4]">
-              <TypeGlyph type={key} className="text-[#D8A84A]" />
-              {label}
-            </p>
-            <button
-              onClick={() => refresh(key)}
-              disabled={loading[key]}
-              className="btn-press rounded-full border border-[#96D6B4]/20 bg-[#092E20]/70 px-3 py-1.5 text-xs font-bold text-[#D6F0E0]/55 hover:text-[#F7F1E4] disabled:opacity-30"
-            >
-              {loading[key] ? '…' : 'Refresh'}
-            </button>
+      <div className="space-y-5 px-[18px] pt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex gap-4 text-[11px] font-bold text-[rgba(214,240,224,0.7)]">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#2DD48F]" />In your queue</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#D8A84A]" />Rated</span>
           </div>
+          <button onClick={() => loadSection(medium, pages[medium] >= 5 ? 1 : pages[medium] + 1)} disabled={loading[medium]}
+            className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">
+            {loading[medium] ? '...' : 'Refresh'}
+          </button>
+        </div>
 
-          {loading[key] && items[key].length === 0 ? (
-            <div className="flex gap-3 overflow-hidden">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className={`shrink-0 animate-pulse rounded-2xl ${square ? 'h-[130px] w-[130px]' : 'h-[195px] w-[130px]'}`}
-                  style={{ background: 'rgba(150,214,180,0.12)' }} />
-              ))}
+        {loading[medium] && activeItems.length === 0 ? (
+          <div className="grid grid-cols-3 gap-3">
+            {[...Array(9)].map((_, i) => <div key={i} className="h-[120px] animate-pulse rounded-xl bg-white/10" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            {activeItems.map(item => (
+              <DiscoverCard key={item.media_id} item={item} logEntry={logMap[item.media_id]} onTap={() => setRatingItem(item)} onQueue={() => handleQueue(item)} />
+            ))}
+          </div>
+        )}
+
+        <section>
+          <SectionTitle count={queued.length}>Queued</SectionTitle>
+          {queued.length === 0 ? (
+            <div className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+              <EmptyState title="No queued titles" body="Tap + on a poster to save it here." />
             </div>
           ) : (
-            <div className="poster-scroll -mx-4 px-4">
-              {items[key].map(item => {
-                const logged = logMap[item.media_id]
-                return (
-                  <PosterCard
-                    key={item.media_id}
-                    item={item}
-                    logEntry={logged}
-                    square={square}
-                    onTap={() => setRatingItem(item)}
-                    onQueue={() => handleQueue(item)}
-                  />
-                )
-              })}
-
-              {key !== 'album' && (
-                <button
-                  onClick={() => loadSection(key, pages[key] + 1)}
-                  disabled={loading[key]}
-                  className={`btn-press q-panel flex shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-[#D6F0E0]/55 hover:text-[#F7F1E4] disabled:opacity-30 ${square ? 'h-[130px] w-[130px]' : 'h-[195px] w-[130px]'}`}
-                >
-                  <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
-                  <span className="text-[10px] font-semibold">More</span>
-                </button>
-              )}
+            <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+              {queued.map((item, i) => (
+                <div key={item.media_id} className={`flex items-center gap-3 px-[13px] py-[11px] ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
+                  <PosterTile item={item} w={34} h={52} radius={8} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title}</p>
+                    <p className="truncate text-[11.5px] text-[rgba(214,240,224,0.5)]">{item.media_creator || item.media_type}</p>
+                  </div>
+                  <button onClick={() => setRatingItem(item)} className="btn-press rounded-full border border-[#D8A84A]/40 px-3 py-1.5 text-xs font-bold text-[#D8A84A]">★ Rate</button>
+                </div>
+              ))}
             </div>
           )}
         </section>
-      ))}
+      </div>
 
-      {ratingItem && (
-        <RatingModal
-          item={ratingItem}
-          existingEntry={logMap[ratingItem.media_id]}
-          onClose={() => setRatingItem(null)}
-          onSaved={handleSaved}
-        />
-      )}
+      {ratingItem && <RatingModal item={ratingItem} existingEntry={logMap[ratingItem.media_id]} onClose={() => setRatingItem(null)} onSaved={fetchUserLog} />}
     </div>
   )
 }
 
-function PosterCard({ item, logEntry, square = false, onTap, onQueue }) {
-  const w = square ? 'w-[130px]' : 'w-[130px]'
-  const h = square ? 'h-[130px]' : 'h-[195px]'
-  const isQueued = logEntry && !logEntry.rating
-
+function DiscoverCard({ item, logEntry, onTap, onQueue }) {
+  const queued = logEntry && !logEntry.rating
   return (
-    <button onClick={onTap} className={`btn-press group shrink-0 ${w} text-left`}>
-      <div className="relative overflow-hidden rounded-2xl border border-[#96D6B4]/14 bg-[#082E20] shadow-lg">
-        <img src={item.media_poster_url} alt={item.media_title} className={`${w} ${h} object-cover`} />
-
-        {logEntry && logEntry.rating ? (
-          <div className="absolute inset-0 flex flex-col justify-end"
-            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}>
-            <div className="px-2 pb-2">
-              <div className="mb-0.5 flex items-center gap-1">
-                <IconStar className="h-3 w-3 text-[#D8A84A]" />
-                <span className="text-xs font-bold text-white">{logEntry.rating}</span>
-              </div>
-              {logEntry.review && <p className="line-clamp-2 text-[9px] italic text-white/50">&quot;{logEntry.review}&quot;</p>}
-            </div>
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center rounded-2xl opacity-0 transition-opacity group-hover:opacity-100"
-            style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <IconStar className="h-7 w-7 text-[#F4E9D1]" />
-          </div>
-        )}
-
-        {logEntry && (
-          <div className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold shadow ${isQueued ? 'bg-[#C99A52] text-white' : 'bg-[#2DD48F] text-[#052016]'}`}>
-            {isQueued ? <IconBookmark className="h-3 w-3" /> : '✓'}
-          </div>
-        )}
-
-        {!logEntry && (
-          <button
-            onClick={e => { e.stopPropagation(); onQueue() }}
-            className="btn-press absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100"
-            style={{ background: 'rgba(5,32,22,0.88)' }}
-            title="Add to queue"
-          >
-            <IconBookmark className="h-4 w-4 text-[#F4E9D1]" />
+    <article className="min-w-0">
+      <button onClick={onTap} className="btn-press w-full text-left">
+        <PosterTile item={item} className="w-full" h={120} radius={12}>
+          <button onClick={e => { e.stopPropagation(); onQueue() }}
+            className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${logEntry ? 'bg-[#2DD48F] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
+            {logEntry ? '✓' : '+'}
           </button>
-        )}
-      </div>
-
-      <p className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-tight text-[#D6F0E0]/70">{item.media_title}</p>
-      {item.media_creator && <p className="mt-0.5 truncate text-[10px] text-[#D6F0E0]/40">{item.media_creator}</p>}
-      {item.year && <p className="mt-0.5 text-[10px] text-[#D6F0E0]/30">{item.year}</p>}
-    </button>
+          {logEntry?.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-[rgba(2,12,8,0.82)] px-2 py-1 text-[10.5px] font-semibold text-[#D8A84A] backdrop-blur">★ {logEntry.rating}</div>}
+          {queued && <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#2DD48F]" />}
+        </PosterTile>
+      </button>
+      <p className="mt-1.5 line-clamp-2 text-xs font-bold leading-tight text-[#F7F1E4]">{item.media_title}</p>
+      <p className="mt-0.5 truncate text-[10.5px] text-[rgba(214,240,224,0.5)]">{item.media_creator || item.year}</p>
+    </article>
   )
 }
