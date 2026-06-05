@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
+import { IconBookmark, IconStar, PageHeader, TypeGlyph } from '../components/DesignPrimitives'
 
 const MEDIA_TYPES = [
-  { key: 'movie', label: '🎬 Movies',   square: false },
-  { key: 'tv',    label: '📺 TV Shows', square: false },
-  { key: 'book',  label: '📚 Books',    square: false },
-  { key: 'album', label: '🎵 Albums',   square: true  },
+  { key: 'movie', label: 'Movies',   square: false },
+  { key: 'tv',    label: 'TV Shows', square: false },
+  { key: 'book',  label: 'Books',    square: false },
+  { key: 'album', label: 'Albums',   square: true  },
 ]
 
 async function fetchTrending(mediaType, page = 1) {
@@ -63,7 +64,6 @@ export default function CollectionPage() {
   }
 
   async function handleQueue(item) {
-    // Save to personal log with no rating (want to watch)
     await supabase.from('user_media_log').upsert({
       user_id:          session.user.id,
       media_type:       item.media_type,
@@ -83,31 +83,30 @@ export default function CollectionPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="anim-scale">
-        <h1 className="text-3xl font-extrabold text-white">Discover</h1>
-        <p className="text-white/50 text-sm mt-0.5">Rate what you've watched to build your collection</p>
-      </div>
+    <div className="space-y-8 pb-4">
+      <PageHeader title="Discover" subtitle="Tabbed shelves for movies, TV, books, and albums worth adding to your queue." />
 
       {MEDIA_TYPES.map(({ key, label, square }) => (
         <section key={key} className="anim-up">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-white font-extrabold text-lg">{label}</p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-lg font-extrabold text-[#F7F1E4]">
+              <TypeGlyph type={key} className="text-[#D8A84A]" />
+              {label}
+            </p>
             <button
               onClick={() => refresh(key)}
               disabled={loading[key]}
-              className="btn-press text-xs font-bold text-white/50 hover:text-white border border-white/20 px-3 py-1.5 rounded-full disabled:opacity-30"
-              style={{ background: 'rgba(255,255,255,0.1)' }}
+              className="btn-press rounded-full border border-[#96D6B4]/20 bg-[#092E20]/70 px-3 py-1.5 text-xs font-bold text-[#D6F0E0]/55 hover:text-[#F7F1E4] disabled:opacity-30"
             >
-              {loading[key] ? '…' : '↻ Refresh'}
+              {loading[key] ? '…' : 'Refresh'}
             </button>
           </div>
 
           {loading[key] && items[key].length === 0 ? (
             <div className="flex gap-3 overflow-hidden">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className={`shrink-0 rounded-2xl animate-pulse ${square ? 'w-[130px] h-[130px]' : 'w-[130px] h-[195px]'}`}
-                  style={{ background: 'rgba(255,255,255,0.1)' }} />
+                <div key={i} className={`shrink-0 animate-pulse rounded-2xl ${square ? 'h-[130px] w-[130px]' : 'h-[195px] w-[130px]'}`}
+                  style={{ background: 'rgba(150,214,180,0.12)' }} />
               ))}
             </div>
           ) : (
@@ -126,13 +125,11 @@ export default function CollectionPage() {
                 )
               })}
 
-              {/* Load more — albums have page 1 only from RSS */}
               {key !== 'album' && (
                 <button
                   onClick={() => loadSection(key, pages[key] + 1)}
                   disabled={loading[key]}
-                  className={`btn-press shrink-0 rounded-2xl flex flex-col items-center justify-center gap-1 text-white/50 hover:text-white border border-white/20 disabled:opacity-30 ${square ? 'w-[130px] h-[130px]' : 'w-[130px] h-[195px]'}`}
-                  style={{ background: 'rgba(255,255,255,0.08)' }}
+                  className={`btn-press q-panel flex shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-[#D6F0E0]/55 hover:text-[#F7F1E4] disabled:opacity-30 ${square ? 'h-[130px] w-[130px]' : 'h-[195px] w-[130px]'}`}
                 >
                   <span className="text-2xl">{loading[key] ? '…' : '+'}</span>
                   <span className="text-[10px] font-semibold">More</span>
@@ -161,66 +158,49 @@ function PosterCard({ item, logEntry, square = false, onTap, onQueue }) {
   const isQueued = logEntry && !logEntry.rating
 
   return (
-    <button
-      onClick={onTap}
-      className={`btn-press shrink-0 ${w} text-left group`}
-    >
-      <div className="relative rounded-2xl overflow-hidden shadow-lg">
-        <img
-          src={item.media_poster_url}
-          alt={item.media_title}
-          className={`${w} ${h} object-cover`}
-        />
+    <button onClick={onTap} className={`btn-press group shrink-0 ${w} text-left`}>
+      <div className="relative overflow-hidden rounded-2xl border border-[#96D6B4]/14 bg-[#082E20] shadow-lg">
+        <img src={item.media_poster_url} alt={item.media_title} className={`${w} ${h} object-cover`} />
 
-        {/* Rated overlay */}
         {logEntry && logEntry.rating ? (
           <div className="absolute inset-0 flex flex-col justify-end"
             style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}>
             <div className="px-2 pb-2">
-              <div className="flex items-center gap-0.5 mb-0.5">
-                <span className="text-amber-300 text-xs">★</span>
-                <span className="text-white text-xs font-bold">{logEntry.rating}</span>
+              <div className="mb-0.5 flex items-center gap-1">
+                <IconStar className="h-3 w-3 text-[#D8A84A]" />
+                <span className="text-xs font-bold text-white">{logEntry.rating}</span>
               </div>
-              {logEntry.review && (
-                <p className="text-white/50 text-[9px] line-clamp-2 italic">"{logEntry.review}"</p>
-              )}
+              {logEntry.review && <p className="line-clamp-2 text-[9px] italic text-white/50">&quot;{logEntry.review}&quot;</p>}
             </div>
           </div>
         ) : (
-          /* Hover/tap prompt */
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+          <div className="absolute inset-0 flex items-center justify-center rounded-2xl opacity-0 transition-opacity group-hover:opacity-100"
             style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <span className="text-white text-2xl">★</span>
+            <IconStar className="h-7 w-7 text-[#F4E9D1]" />
           </div>
         )}
 
-        {/* Status badge: green check = rated, bookmark = queued */}
         {logEntry && (
-          <div className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center shadow text-[9px] font-bold ${isQueued ? 'bg-sky-400 text-white' : 'bg-green-400 text-white'}`}>
-            {isQueued ? '🔖' : '✓'}
+          <div className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold shadow ${isQueued ? 'bg-[#C99A52] text-white' : 'bg-[#2DD48F] text-[#052016]'}`}>
+            {isQueued ? <IconBookmark className="h-3 w-3" /> : '✓'}
           </div>
         )}
 
-        {/* Add to queue button — only shown when not yet logged */}
         {!logEntry && (
           <button
             onClick={e => { e.stopPropagation(); onQueue() }}
-            className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity btn-press"
-            style={{ background: 'rgba(0,0,0,0.7)', fontSize: '0.75rem' }}
+            className="btn-press absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100"
+            style={{ background: 'rgba(5,32,22,0.88)' }}
             title="Add to queue"
           >
-            🔖
+            <IconBookmark className="h-4 w-4 text-[#F4E9D1]" />
           </button>
         )}
       </div>
 
-      <p className="text-white/70 text-[11px] font-semibold mt-1.5 leading-tight line-clamp-2">
-        {item.media_title}
-      </p>
-      {item.media_creator && (
-        <p className="text-white/40 text-[10px] mt-0.5 truncate">{item.media_creator}</p>
-      )}
-      {item.year && <p className="text-white/30 text-[10px] mt-0.5">{item.year}</p>}
+      <p className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-tight text-[#D6F0E0]/70">{item.media_title}</p>
+      {item.media_creator && <p className="mt-0.5 truncate text-[10px] text-[#D6F0E0]/40">{item.media_creator}</p>}
+      {item.year && <p className="mt-0.5 text-[10px] text-[#D6F0E0]/30">{item.year}</p>}
     </button>
   )
 }
