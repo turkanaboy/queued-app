@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
-import { TASTE_GENRE_GROUPS, WATCHING_STYLES } from '../lib/taste'
+import { TASTE_GENRE_GROUPS } from '../lib/taste'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 import {
@@ -48,7 +48,6 @@ export default function ProfilePage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
   const [editingTaste, setEditingTaste] = useState(false)
   const [selectedGenres, setSelectedGenres] = useState([])
-  const [watchingStyle, setWatchingStyle] = useState(null)
   const [saving, setSaving] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [medium, setMedium] = useState('movie')
@@ -73,7 +72,6 @@ export default function ProfilePage() {
     setDisplayName(data?.display_name || '')
     setSelectedPlatforms(data?.platforms ?? [])
     setSelectedGenres(data?.favorite_genres ?? [])
-    setWatchingStyle(data?.watching_style ?? null)
     setLoading(false)
   }
 
@@ -158,6 +156,7 @@ export default function ProfilePage() {
         status,
         source_type: 'recommendation',
         source_user_id: item.origin_user_id,
+        streaming_providers: item.streaming_providers ?? [],
       }, { onConflict: 'user_id,media_id' })
     }
     fetchRecommendationQueue()
@@ -206,7 +205,7 @@ export default function ProfilePage() {
 
   async function saveTaste() {
     setSaving(true)
-    await supabase.from('users').update({ favorite_genres: selectedGenres, watching_style: watchingStyle }).eq('id', session.user.id)
+    await supabase.from('users').update({ favorite_genres: selectedGenres }).eq('id', session.user.id)
     await refreshProfile()
     setEditingTaste(false)
     fetchProfile()
@@ -249,6 +248,7 @@ export default function ProfilePage() {
           origin_user_id: rec.sender_id,
           source_type: 'recommendation',
           source_user_id: rec.sender_id,
+          streaming_providers: rec.streaming_providers ?? [],
         }
       }),
       ...sentRecommendations.map(rec => ({
@@ -338,8 +338,6 @@ export default function ProfilePage() {
             setEditing={setEditingTaste}
             selectedGenres={selectedGenres}
             toggleGenre={toggleGenre}
-            watchingStyle={watchingStyle}
-            setWatchingStyle={setWatchingStyle}
             save={saveTaste}
             saving={saving}
           />
@@ -380,6 +378,7 @@ export default function ProfilePage() {
                   media_creator: rec.media_creator,
                   media_poster_url: rec.media_poster_url,
                   origin_user_id: rec.sender_id,
+                  streaming_providers: rec.streaming_providers ?? [],
                 }, status)
               }
             }}
@@ -569,7 +568,7 @@ function QueueRow({ item, own, first, onOpen, onStatus, onDelete }) {
   )
 }
 
-function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, watchingStyle, setWatchingStyle, save, saving }) {
+function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, saving }) {
   if (!editing) {
     return (
       <button
@@ -579,7 +578,7 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, watchi
         <span>
           <span className="block text-sm font-extrabold text-[#F7F1E4]">Customize your experience</span>
           <span className="mt-0.5 block text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">
-            {selectedGenres.length ? `${selectedGenres.length} taste picks saved` : 'Tune genres and recommendation style'}
+            {selectedGenres.length ? `${selectedGenres.length} taste picks saved` : 'Tune genres for recommendations'}
           </span>
         </span>
         <span className="text-[#D8A84A]">Edit</span>
@@ -618,26 +617,6 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, watchi
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-4">
-        <p className="font-mono-q mb-2 text-[10px] font-bold uppercase tracking-[1.4px] text-[rgba(214,240,224,0.42)]">Style</p>
-        <div className="grid grid-cols-2 gap-2">
-          {WATCHING_STYLES.map(style => {
-            const active = watchingStyle === style.value
-            return (
-              <button
-                key={style.value}
-                type="button"
-                onClick={() => setWatchingStyle(active ? null : style.value)}
-                className={`btn-press rounded-[14px] border px-3 py-2 text-left text-xs font-bold ${active ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-[#F7F1E4]'}`}
-              >
-                <span className="font-mono-q mr-1 opacity-60">{style.icon}</span>
-                {style.label}
-              </button>
-            )
-          })}
-        </div>
       </div>
 
       <div className="mt-4 flex gap-2">

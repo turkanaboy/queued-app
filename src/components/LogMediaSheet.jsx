@@ -16,6 +16,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
+  const [providers, setProviders] = useState(null)
   const [searching, setSearching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -26,6 +27,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   async function search(q, type = searchType) {
     setQuery(q)
     setSelected(null)
+    setProviders(null)
     clearTimeout(debounceRef.current)
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
@@ -39,6 +41,22 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       setResults(json.results ?? [])
       setSearching(false)
     }, 400)
+  }
+
+  async function selectTitle(item) {
+    setSelected(item)
+    setResults([])
+    if (!['movie', 'tv'].includes(item.media_type)) {
+      setProviders([])
+      return
+    }
+    const token = (await supabase.auth.getSession()).data.session?.access_token
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`,
+      { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+    )
+    const json = await res.json()
+    setProviders(json.providers ?? [])
   }
 
   function changeType(t) {
@@ -62,6 +80,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       status,
       review: status === 'finished' ? (review.trim() || null) : null,
       source_type: 'self',
+      streaming_providers: providers ?? [],
     }, { onConflict: 'user_id,media_id' })
     if (error) { setError(error.message); setSaving(false); return }
     onSaved?.()
@@ -80,7 +99,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
           {results.length > 0 && (
             <div className="max-h-[280px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
               {results.map((r, i) => (
-                <button key={r.media_id} onClick={() => { setSelected(r); setResults([]) }}
+                <button key={r.media_id} onClick={() => selectTitle(r)}
                   className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
                   <PosterTile item={r} w={34} h={52} radius={8} />
                   <div className="min-w-0 flex-1">

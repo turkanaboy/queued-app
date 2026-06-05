@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useUnreadCount } from '../hooks/useUnreadCount'
-import { useAuth } from '../hooks/useAuth'
-import LogMediaSheet from './LogMediaSheet'
+import { RecommendationSheet } from '../pages/AddRecommendationPage'
 
 export default function Layout() {
   const unreadCount = useUnreadCount()
-  const { session } = useAuth()
-  const [showAddSheet, setShowAddSheet] = useState(false)
+  const [showRecommendSheet, setShowRecommendSheet] = useState(false)
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -22,12 +20,12 @@ export default function Layout() {
           </TabItem>
 
           <TabItem to="/queued" label="Queued Up">
-            <DiscoverIcon />
+            <ListIcon />
           </TabItem>
 
           <button
             type="button"
-            onClick={() => setShowAddSheet(true)}
+            onClick={() => setShowRecommendSheet(true)}
             className="btn-press -mt-[22px] flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[rgba(216,168,74,0.36)] bg-[linear-gradient(135deg,#C96B4B,#B87333)] text-[#FFF8E8] shadow-[0_8px_22px_rgba(0,0,0,0.35)]"
             aria-label="Add title"
           >
@@ -36,8 +34,8 @@ export default function Layout() {
             </svg>
           </button>
 
-          <TabItem to="/collection" label="Search">
-            <SearchIcon />
+          <TabItem to="/collection" label="Discover">
+            <DiscoverIcon />
           </TabItem>
 
           <TabItem to="/profile" label="Profile">
@@ -46,13 +44,7 @@ export default function Layout() {
         </div>
       </nav>
 
-      {showAddSheet && session?.user?.id && (
-        <LogMediaSheet
-          userId={session.user.id}
-          onClose={() => setShowAddSheet(false)}
-          onSaved={() => {}}
-        />
-      )}
+      {showRecommendSheet && <RecommendationSheet onClose={() => setShowRecommendSheet(false)} />}
     </div>
   )
 }
@@ -86,11 +78,11 @@ function TabItem({ to, label, badge, children }) {
   )
 }
 
-function SearchIcon() {
+function ListIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
-      <path d="M21 21l-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
     </svg>
   )
 }

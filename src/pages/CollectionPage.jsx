@@ -4,13 +4,17 @@ import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
 import { EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle } from '../lib/queuedDesign'
 
-async function fetchTrending(mediaType, page = 1) {
+async function searchMedia(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=trending&media_type=${mediaType}&page=${page}`,
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`,
     { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
   )
   return res.json()
+}
+
+async function fetchTrending(mediaType, page = 1) {
+  return searchMedia(`?action=trending&media_type=${mediaType}&page=${page}`)
 }
 
 export default function CollectionPage() {
@@ -37,12 +41,18 @@ export default function CollectionPage() {
   async function loadSection(mediaType, page) {
     setLoading(prev => ({ ...prev, [mediaType]: true }))
     const json = await fetchTrending(mediaType, page)
-    setItems(prev => ({ ...prev, [mediaType]: page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])] }))
+    setItems(prev => {
+      const next = page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])]
+      return { ...prev, [mediaType]: [...new Map(next.map(item => [item.media_id, item])).values()] }
+    })
     setPages(prev => ({ ...prev, [mediaType]: page }))
     setLoading(prev => ({ ...prev, [mediaType]: false }))
   }
 
   async function handleQueue(item) {
+    const providers = ['movie', 'tv'].includes(item.media_type)
+      ? (await searchMedia(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)).providers ?? []
+      : []
     await supabase.from('user_media_log').upsert({
       user_id: session.user.id,
       media_type: item.media_type,
@@ -53,6 +63,7 @@ export default function CollectionPage() {
       rating: null,
       status: 'queued',
       source_type: 'self',
+      streaming_providers: providers,
     }, { onConflict: 'user_id,media_id' })
     fetchUserLog()
   }
@@ -63,7 +74,7 @@ export default function CollectionPage() {
 
   return (
     <div className="pb-5">
-      <ScreenHeader title="Search" subtitle="Find what to queue or mark finished" />
+      <ScreenHeader title="Discover" subtitle="Find what to queue or mark finished" />
       <MediumTabs value={medium} counts={counts} onChange={setMedium} />
 
       <div className="space-y-5 px-[18px] pt-4">
@@ -72,9 +83,9 @@ export default function CollectionPage() {
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#2DD48F]" />In your queue</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#D8A84A]" />Rated</span>
           </div>
-          <button onClick={() => loadSection(medium, pages[medium] >= 5 ? 1 : pages[medium] + 1)} disabled={loading[medium]}
+          <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
             className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">
-            {loading[medium] ? '...' : 'Refresh'}
+            {loading[medium] ? '...' : 'Load more'}
           </button>
         </div>
 
@@ -83,11 +94,17 @@ export default function CollectionPage() {
             {[...Array(9)].map((_, i) => <div key={i} className="h-[120px] animate-pulse rounded-xl bg-white/10" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            {activeItems.map(item => (
-              <DiscoverCard key={item.media_id} item={item} logEntry={logMap[item.media_id]} onTap={() => setRatingItem(item)} onQueue={() => handleQueue(item)} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-3 gap-3">
+              {activeItems.map(item => (
+                <DiscoverCard key={item.media_id} item={item} logEntry={logMap[item.media_id]} onTap={() => setRatingItem(item)} onQueue={() => handleQueue(item)} />
+              ))}
+            </div>
+            <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
+              className="btn-press btn-outline-cream w-full rounded-2xl py-3 text-sm font-bold disabled:opacity-40">
+              {loading[medium] ? 'Loading...' : 'Load more'}
+            </button>
+          </>
         )}
 
         <section>

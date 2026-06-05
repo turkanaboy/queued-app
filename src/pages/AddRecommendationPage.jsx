@@ -5,9 +5,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { getProviderLink, getBookLinks, getAlbumLinks } from '../lib/affiliates'
-import { Chip, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, SearchField } from '../lib/queuedDesign'
+import { Chip, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, SearchField, SheetShell } from '../lib/queuedDesign'
 
-async function tmdbCall(path) {
+async function mediaCall(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`, {
     headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
@@ -16,6 +16,23 @@ async function tmdbCall(path) {
 }
 
 export default function AddRecommendationPage() {
+  return (
+    <div className="pb-5">
+      <ScreenHeader title="Recommend" subtitle="Send a title to a friend" />
+      <RecommendationComposer />
+    </div>
+  )
+}
+
+export function RecommendationSheet({ onClose }) {
+  return (
+    <SheetShell onClose={onClose} title="Recommend" size="peek">
+      <RecommendationComposer compact onDone={onClose} />
+    </SheetShell>
+  )
+}
+
+function RecommendationComposer({ compact = false, onDone }) {
   const { session } = useAuth()
   const navigate = useNavigate()
   const [searchType, setSearchType] = useState('multi')
@@ -43,7 +60,13 @@ export default function AddRecommendationPage() {
 
   async function checkDuplicates(mediaId, friendIds) {
     const uid = session.user.id
-    const { data } = await supabase.from('recommendations').select('recipient_id').eq('sender_id', uid).eq('media_id', mediaId).in('recipient_id', friendIds).is('deleted_at', null)
+    const { data } = await supabase
+      .from('recommendations')
+      .select('recipient_id')
+      .eq('sender_id', uid)
+      .eq('media_id', mediaId)
+      .in('recipient_id', friendIds)
+      .is('deleted_at', null)
     const sent = {}
     for (const r of data ?? []) sent[r.recipient_id] = true
     setAlreadySent(sent)
@@ -57,7 +80,7 @@ export default function AddRecommendationPage() {
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const json = await tmdbCall(`?query=${encodeURIComponent(q)}&type=${type}`)
+      const json = await mediaCall(`?query=${encodeURIComponent(q)}&type=${type}`)
       setResults(json.results ?? [])
       setSearching(false)
     }, 400)
@@ -72,13 +95,20 @@ export default function AddRecommendationPage() {
   async function selectTitle(item) {
     setSelected(item)
     setResults([])
-    if (item.media_type === 'book' || item.media_type === 'album') { setProviders(null); return }
-    const json = await tmdbCall(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)
+    if (item.media_type === 'book' || item.media_type === 'album') {
+      setProviders(null)
+      return
+    }
+    const json = await mediaCall(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)
     setProviders(json.providers ?? null)
   }
 
   function toggleFriend(friendship) {
-    setSelectedFriends(prev => prev.find(s => s.friend.id === friendship.friend.id) ? prev.filter(s => s.friend.id !== friendship.friend.id) : [...prev, friendship])
+    setSelectedFriends(prev =>
+      prev.find(s => s.friend.id === friendship.friend.id)
+        ? prev.filter(s => s.friend.id !== friendship.friend.id)
+        : [...prev, friendship]
+    )
   }
 
   async function handleSubmit() {
@@ -97,7 +127,8 @@ export default function AddRecommendationPage() {
       streaming_providers: providers ?? [],
     }))
     await supabase.from('recommendations').insert(rows)
-    navigate('/friends')
+    if (onDone) onDone()
+    else navigate('/friends')
   }
 
   useEffect(() => { fetchFriends() }, [session])
@@ -110,63 +141,70 @@ export default function AddRecommendationPage() {
   const typeOptions = ['multi', ...MEDIA_ORDER]
 
   return (
-    <div className="pb-5">
-      <ScreenHeader title="Recommend" subtitle="Send a title to a friend" />
-      <div className="space-y-5 px-[18px]">
-        <section>
-          <p className="font-mono-q mb-3 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Friend</p>
-          {friends.length === 0 ? <p className="text-sm text-white/40">No friends yet.</p> : (
-            <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
-              {friends.map(f => {
-                const active = !!selectedFriends.find(s => s.friend.id === f.friend.id)
-                return (
-                  <button key={f.friend.id} onClick={() => toggleFriend(f)} className={`btn-press flex min-w-[74px] flex-col items-center gap-1.5 rounded-[16px] border px-3 py-3 ${active ? 'border-[#2DD48F]/60 bg-[#2DD48F]/15' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)]'}`}>
-                    <InitialsAvatar name={f.friend.display_name || f.friend.username} size="sm" />
-                    <span className="max-w-[58px] truncate text-xs font-bold text-[#F7F1E4]">{(f.friend.display_name || f.friend.username).split(' ')[0]}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <div className="scrollbar-none flex gap-2 overflow-x-auto">
-            {typeOptions.map(type => <Chip key={type} active={searchType === type} onClick={() => changeSearchType(type)}>{type === 'multi' ? 'All' : MEDIA[type].label}</Chip>)}
+    <div className={`space-y-5 ${compact ? '' : 'px-[18px]'}`}>
+      <section className="space-y-3">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+          {typeOptions.map(type => (
+            <Chip key={type} active={searchType === type} onClick={() => changeSearchType(type)}>
+              {type === 'multi' ? 'All' : MEDIA[type].label}
+            </Chip>
+          ))}
+        </div>
+        <SearchField autoFocus={compact} value={query} onChange={handleSearch} placeholder="Search..." />
+        {searching && <p className="text-center text-xs text-white/40">Searching...</p>}
+        {results.length > 0 && !selected && (
+          <div className="max-h-[220px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+            {results.map((r, i) => (
+              <button key={r.media_id} onClick={() => selectTitle(r)} className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
+                <PosterTile item={r} w={34} h={52} radius={8} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-[#F7F1E4]">{r.media_title}</p>
+                  <p className="truncate text-[11.5px] capitalize text-[rgba(214,240,224,0.5)]">{r.media_creator ? `${r.media_creator} · ` : ''}{r.media_type}{r.year ? ` · ${r.year}` : ''}</p>
+                </div>
+                <span className="text-xl text-[#D8A84A]">+</span>
+              </button>
+            ))}
           </div>
-          <SearchField value={query} onChange={handleSearch} placeholder="Search..." />
-          {searching && <p className="text-center text-xs text-white/40">Searching...</p>}
-          {results.length > 0 && !selected && (
-            <div className="max-h-[280px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
-              {results.map((r, i) => (
-                <button key={r.media_id} onClick={() => selectTitle(r)} className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
-                  <PosterTile item={r} w={34} h={52} radius={8} />
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-[#F7F1E4]">{r.media_title}</p><p className="truncate text-[11.5px] capitalize text-[rgba(214,240,224,0.5)]">{r.media_creator ? `${r.media_creator} · ` : ''}{r.media_type}{r.year ? ` · ${r.year}` : ''}</p></div>
-                  <span className="text-xl text-[#D8A84A]">+</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {selected && (
-            <div className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-3">
-              <div className="flex items-center gap-3">
-                <PosterTile item={selected} w={40} h={58} radius={10} />
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold text-[#F7F1E4]">{selected.media_title}</p><p className="truncate text-xs text-[rgba(214,240,224,0.5)]">{selected.media_creator || selected.media_type}</p></div>
-                <button onClick={() => { setSelected(null); setQuery(''); setProviders(null) }} className="btn-press text-xl text-[rgba(214,240,224,0.5)]">×</button>
+        )}
+        {selected && (
+          <div className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-3">
+            <div className="flex items-center gap-3">
+              <PosterTile item={selected} w={40} h={58} radius={10} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-extrabold text-[#F7F1E4]">{selected.media_title}</p>
+                <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">{selected.media_creator || selected.media_type}</p>
               </div>
-              <div className="mt-2"><ProviderRows providers={providers} title={selected.media_title} creator={selected.media_creator} mediaType={selected.media_type} compact /></div>
+              <button onClick={() => { setSelected(null); setQuery(''); setProviders(null) }} className="btn-press text-xl text-[rgba(214,240,224,0.5)]">x</button>
             </div>
-          )}
-        </section>
+            <div className="mt-2"><ProviderRows providers={providers} title={selected.media_title} creator={selected.media_creator} mediaType={selected.media_type} compact /></div>
+          </div>
+        )}
+      </section>
 
-        <textarea value={note} onChange={e => setNote(e.target.value.slice(0, 500))} rows={3} placeholder="Note (optional)"
-          className="w-full resize-none rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] px-3.5 py-3 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
+      <section>
+        <p className="font-mono-q mb-3 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Friend</p>
+        {friends.length === 0 ? <p className="text-sm text-white/40">No friends yet.</p> : (
+          <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
+            {friends.map(f => {
+              const active = !!selectedFriends.find(s => s.friend.id === f.friend.id)
+              return (
+                <button key={f.friend.id} onClick={() => toggleFriend(f)} className={`btn-press flex min-w-[74px] flex-col items-center gap-1.5 rounded-[16px] border px-3 py-3 ${active ? 'border-[#2DD48F]/60 bg-[#2DD48F]/15' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)]'}`}>
+                  <InitialsAvatar name={f.friend.display_name || f.friend.username} size="sm" />
+                  <span className="max-w-[58px] truncate text-xs font-bold text-[#F7F1E4]">{(f.friend.display_name || f.friend.username).split(' ')[0]}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
-        <button onClick={handleSubmit} disabled={submitting || !selected || sendableCount === 0}
-          className="btn-press btn-cream w-full rounded-2xl py-4 text-sm font-bold disabled:opacity-40">
-          {submitting ? 'Sending...' : selectedFriend && sendableCount === 1 ? `Send to ${selectedFriend.display_name?.split(' ')[0] || selectedFriend.username}` : sendableCount > 0 ? `Send to ${sendableCount} friends` : 'Select a title and friend'}
-        </button>
-      </div>
+      <textarea value={note} onChange={e => setNote(e.target.value.slice(0, 500))} rows={3} placeholder="Note (optional)"
+        className="w-full resize-none rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] px-3.5 py-3 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
+
+      <button onClick={handleSubmit} disabled={submitting || !selected || sendableCount === 0}
+        className="btn-press btn-cream w-full rounded-2xl py-4 text-sm font-bold disabled:opacity-40">
+        {submitting ? 'Sending...' : selectedFriend && sendableCount === 1 ? `Send to ${selectedFriend.display_name?.split(' ')[0] || selectedFriend.username}` : sendableCount > 0 ? `Send to ${sendableCount} friends` : 'Select a title and friend'}
+      </button>
     </div>
   )
 }

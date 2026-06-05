@@ -199,12 +199,15 @@ export function EmptyState({ title, body, action }) {
   )
 }
 
-export function SheetShell({ children, onClose, title, footer }) {
+export function SheetShell({ children, onClose, title, footer, size = 'default' }) {
+  const sizeClass = size === 'peek'
+    ? 'max-h-[60dvh] overflow-y-auto'
+    : ''
   return (
     <>
       <div className="fixed inset-0 z-30 bg-[rgba(2,10,7,0.55)] backdrop-blur-[2px]" style={{ animation: 'qFade .2s ease' }} onClick={onClose} />
       <div className="fixed inset-0 z-40 flex items-end justify-center pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-[430px] rounded-t-[26px] border-t border-[#F4E9D1]/25 bg-[linear-gradient(180deg,#0a3526,#062318)] px-[18px] pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.5)]" style={{ animation: 'qUp .28s cubic-bezier(0.16,1,0.3,1)' }}>
+        <div className={`pointer-events-auto w-full max-w-[430px] rounded-t-[26px] border-t border-[#F4E9D1]/25 bg-[linear-gradient(180deg,#0a3526,#062318)] px-[18px] pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.5)] ${sizeClass}`} style={{ animation: 'qUp .28s cubic-bezier(0.16,1,0.3,1)' }}>
           <div className="mx-auto mb-3.5 h-1 w-[38px] rounded-full bg-[#F4E9D1]/25" />
           {title && (
             <div className="mb-3.5 flex items-center justify-between">
