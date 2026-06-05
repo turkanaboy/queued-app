@@ -44,6 +44,24 @@ function recommendationNote(item: any, user: any, reason: string) {
   return `${reason} ${score} from ${(item.vote_count ?? 0).toLocaleString()} ratings.${genres}${style}`.slice(0, 500)
 }
 
+async function upsertRecommendationLog(supabase: any, recommendation: any, userId: string) {
+  return await supabase
+    .from('user_media_log')
+    .upsert({
+      user_id: userId,
+      media_type: recommendation.media_type,
+      media_id: recommendation.media_id,
+      media_title: recommendation.media_title,
+      media_creator: recommendation.media_creator ?? null,
+      media_poster_url: recommendation.media_poster_url,
+      status: recommendation.recipient_status,
+      source_type: 'recommendation',
+      source_user_id: recommendation.sender_id ?? BOT_USER_ID,
+      streaming_providers: recommendation.streaming_providers ?? [],
+      created_at: recommendation.created_at,
+    }, { onConflict: 'user_id,media_id' })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -58,7 +76,7 @@ serve(async (req) => {
 
   const { data: active } = await supabase
     .from('recommendations')
-    .select('id, media_title, media_type, recipient_status, created_at')
+    .select('id, sender_id, media_title, media_type, media_id, media_creator, media_poster_url, streaming_providers, recipient_status, created_at')
     .eq('sender_id', BOT_USER_ID)
     .eq('recipient_id', user_id)
     .in('recipient_status', ACTIVE_STATUSES)
@@ -68,6 +86,9 @@ serve(async (req) => {
     .maybeSingle()
 
   if (active) {
+    const { error: logError } = await upsertRecommendationLog(supabase, active, user_id)
+    if (logError) return json({ error: logError.message }, 500)
+
     return json({ ok: true, sent: 0, active: true, recommendation: active })
   }
 
@@ -149,10 +170,15 @@ serve(async (req) => {
     const { data, error } = await supabase
       .from('recommendations')
       .insert(rec)
-      .select('id, media_title, media_type, recipient_status, created_at')
+      .select('id, sender_id, media_title, media_type, media_id, media_creator, media_poster_url, streaming_providers, recipient_status, created_at')
       .single()
 
-    if (!error) return json({ ok: true, sent: 1, active: false, recommendation: data })
+    if (!error) {
+      const { error: logError } = await upsertRecommendationLog(supabase, data, user_id)
+      if (logError) return json({ error: logError.message }, 500)
+
+      return json({ ok: true, sent: 1, active: false, recommendation: data })
+    }
   }
 
   return json({ ok: true, sent: 0, active: false, exhausted: true })
