@@ -127,14 +127,14 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                           style={{ fontSize: '2.4rem', lineHeight: 1, width: '2.6rem', height: '2.6rem' }}
                         >
                           <span className="absolute inset-0 flex items-center justify-center text-white/20 pointer-events-none">
-                            *
+                            ★
                           </span>
                           {(isFull || isHalf) && (
                             <span
                               className="absolute inset-0 flex items-center justify-center text-amber-300 pointer-events-none"
                               style={isHalf ? { clipPath: 'inset(0 50% 0 0)' } : {}}
                             >
-                              *
+                              ★
                             </span>
                           )}
                           <button
