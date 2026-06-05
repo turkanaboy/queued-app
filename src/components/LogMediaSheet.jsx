@@ -117,7 +117,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
                 <input autoFocus type="text" value={query}
                   onChange={e => search(e.target.value)}
                   placeholder={PLACEHOLDERS[searchType]}
-                  className="input-glass pl-10" />
+                  className="input-glass input-search" />
               </div>
 
               {searching && <p className="text-white/40 text-xs text-center">Searching…</p>}

@@ -49,7 +49,7 @@ function TabItem({ to, label, badge, children }) {
       to={to}
       className={({ isActive }) =>
         `btn-press flex flex-col items-center gap-0.5 px-2 py-1 rounded-2xl transition-all ${
-          isActive ? 'opacity-100' : 'opacity-45'
+          isActive ? 'opacity-100' : 'opacity-75'
         }`
       }
     >

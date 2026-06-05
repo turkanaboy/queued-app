@@ -182,7 +182,7 @@ export default function AddRecommendationPage() {
             value={query}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Search…"
-            className="input-glass pl-10"
+            className="input-glass input-search"
           />
         </div>
 

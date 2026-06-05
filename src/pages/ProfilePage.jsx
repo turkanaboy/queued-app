@@ -41,6 +41,7 @@ export default function ProfilePage() {
   const [stats, setStats] = useState(null)
   const [mediaLog, setMediaLog] = useState([])
   const [recommendationQueue, setRecommendationQueue] = useState([])
+  const [sentRecommendations, setSentRecommendations] = useState([])
   const [activity, setActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [showLogSheet, setShowLogSheet] = useState(false)
@@ -63,6 +64,7 @@ export default function ProfilePage() {
     fetchStats()
     fetchMediaLog()
     fetchRecommendationQueue()
+    fetchSentRecommendations()
     fetchActivity()
   }, [targetId])
 
@@ -75,15 +77,23 @@ export default function ProfilePage() {
   }
 
   async function fetchStats() {
-    const [sent, received, finished, logged] = await Promise.all([
+    const [sent, received, finished, logged, friends] = await Promise.all([
       supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('sender_id', targetId).is('deleted_at', null),
       supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('recipient_id', targetId).is('deleted_at', null),
       supabase.from('recommendations').select('rating').eq('recipient_id', targetId).eq('recipient_status', 'finished').is('deleted_at', null),
       supabase.from('user_media_log').select('*', { count: 'exact', head: true }).eq('user_id', targetId),
+      supabase.from('friendships').select('*', { count: 'exact', head: true }).or(`user_a_id.eq.${targetId},user_b_id.eq.${targetId}`).eq('status', 'accepted'),
     ])
     const ratings = (finished.data ?? []).map(r => r.rating).filter(Boolean)
     const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null
-    setStats({ sent: sent.count ?? 0, received: received.count ?? 0, finished: finished.data?.length ?? 0, avgRating, logged: logged.count ?? 0 })
+    setStats({
+      sent: sent.count ?? 0,
+      received: received.count ?? 0,
+      finished: finished.data?.length ?? 0,
+      avgRating,
+      logged: logged.count ?? 0,
+      friends: friends.count ?? 0,
+    })
   }
 
   async function fetchMediaLog() {
@@ -104,6 +114,16 @@ export default function ProfilePage() {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
     setRecommendationQueue(data ?? [])
+  }
+
+  async function fetchSentRecommendations() {
+    const { data } = await supabase
+      .from('recommendations')
+      .select('*, recipient:users!recommendations_recipient_id_fkey(id,username,display_name)')
+      .eq('sender_id', targetId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+    setSentRecommendations(data ?? [])
   }
 
   async function fetchActivity() {
@@ -185,6 +205,7 @@ export default function ProfilePage() {
     }
 
     await fetchRecommendationQueue()
+    await fetchSentRecommendations()
     await fetchMediaLog()
     await fetchStats()
     setBotLoading(false)
@@ -223,7 +244,7 @@ export default function ProfilePage() {
   if (!profile) return <div className="flex items-center justify-center pt-20"><p className="text-white/40">User not found.</p></div>
 
   const logByMediaId = new Map(mediaLog.map(item => [item.media_id, item]))
-  const personalItems = [
+  const allItems = [
     ...recommendationQueue.map(rec => {
       const logEntry = logByMediaId.get(rec.media_id)
       return {
@@ -247,6 +268,26 @@ export default function ProfilePage() {
         source_user_id: rec.sender_id,
       }
     }),
+    ...sentRecommendations.map(rec => ({
+      id: `sent-${rec.id}`,
+      recommendation_id: rec.id,
+      item_kind: 'sent',
+      media_type: rec.media_type,
+      media_id: rec.media_id,
+      media_title: rec.media_title,
+      media_creator: rec.media_creator,
+      media_poster_url: rec.media_poster_url,
+      rating: rec.rating ?? null,
+      review: null,
+      status: rec.recipient_status,
+      created_at: rec.created_at,
+      origin: `Sent to ${rec.recipient?.display_name || rec.recipient?.username || 'friend'}`,
+      origin_type: 'sent',
+      origin_user_id: rec.recipient_id,
+      origin_user: rec.recipient,
+      source_type: 'sent',
+      source_user_id: rec.recipient_id,
+    })),
     ...mediaLog
       .filter(item => !recommendationQueue.some(rec => rec.media_id === item.media_id))
       .map(item => ({
@@ -259,13 +300,31 @@ export default function ProfilePage() {
         origin_type: item.source_type === 'recommendation' ? 'recommendation' : 'self',
         origin_user_id: item.source_user_id,
       })),
-  ].filter(item => {
+  ]
+
+  const displayStats = stats ? {
+    ...stats,
+    finished: allItems.filter(item => item.status === 'finished').length,
+  } : null
+
+  const personalItems = allItems.filter(item => {
     if (originFilter === 'mine' && item.origin_type !== 'self') return false
     if (originFilter === 'recommendations' && item.origin_type !== 'recommendation') return false
+    if (originFilter === 'sent' && item.origin_type !== 'sent') return false
     if (statusFilter !== 'all' && item.status !== statusFilter) return false
     if (typeFilter !== 'all' && item.media_type !== typeFilter) return false
     return true
   }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+  function applyStatFilter({ origin = 'all', status = 'all', type = 'all', route } = {}) {
+    if (route) {
+      navigate(route)
+      return
+    }
+    setOriginFilter(origin)
+    setStatusFilter(status)
+    setTypeFilter(type)
+  }
 
   const activeBotRecommendation = recommendationQueue.find(rec =>
     rec.sender_id === BOT_USER_ID && ACTIVE_BOT_STATUSES.includes(rec.recipient_status)
@@ -340,17 +399,16 @@ export default function ProfilePage() {
       </div>
 
       {/* Stats */}
-      {stats && (
+      {displayStats && (
         <div className="grid grid-cols-3 gap-3 anim-up">
-          <StatCard emoji="📝" label="Logged" value={stats.logged} />
-          <StatCard emoji="✅" label="Finished" value={stats.finished} />
-          <StatCard emoji="⭐" label="Avg rating" value={stats.avgRating ?? '—'} />
-          <StatCard emoji="📤" label="Sent" value={stats.sent} />
-          <StatCard emoji="📥" label="Received" value={stats.received} />
-          <StatCard emoji="👥" label="Friends" value="—" />
+          <StatCard emoji="📝" label="Logged" value={displayStats.logged} active={originFilter === 'all' && statusFilter === 'all' && typeFilter === 'all'} onClick={() => applyStatFilter()} />
+          <StatCard emoji="✅" label="Finished" value={displayStats.finished} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
+          <StatCard emoji="⭐" label="Avg rating" value={displayStats.avgRating ?? '—'} active={statusFilter === 'finished'} onClick={() => applyStatFilter({ status: 'finished' })} />
+          <StatCard emoji="📤" label="Sent" value={displayStats.sent} active={originFilter === 'sent'} onClick={() => applyStatFilter({ origin: 'sent' })} />
+          <StatCard emoji="📥" label="Received" value={displayStats.received} active={originFilter === 'recommendations'} onClick={() => applyStatFilter({ origin: 'recommendations' })} />
+          <StatCard emoji="👥" label="Friends" value={displayStats.friends} onClick={() => applyStatFilter({ route: '/friends' })} />
         </div>
       )}
-
       {/* Personal task list */}
       <section className="anim-up">
         <div className="flex items-center justify-between mb-3">
@@ -393,15 +451,11 @@ export default function ProfilePage() {
               options={[
                 { value: 'all', label: 'All' },
                 { value: 'mine', label: 'Mine' },
-                { value: 'recommendations', label: 'Recommendations' },
+                { value: 'recommendations', label: 'Received' },
+                { value: 'sent', label: 'Sent' },
               ]}
               value={originFilter}
               onChange={setOriginFilter}
-            />
-            <FilterRow
-              options={STATUS_OPTIONS.map(s => ({ value: s, label: STATUS_LABELS[s] }))}
-              value={statusFilter}
-              onChange={setStatusFilter}
             />
             <FilterRow
               options={[
@@ -437,7 +491,7 @@ export default function ProfilePage() {
               <div key={`${item.item_kind}-${item.id}`} className="glass rounded-2xl p-3 flex gap-3">
                 <button
                   className="relative shrink-0 rounded-xl overflow-hidden shadow-lg"
-                  onClick={() => isOwnProfile && setEditingLogItem(item)}
+                  onClick={() => isOwnProfile && item.item_kind !== 'sent' && setEditingLogItem(item)}
                 >
                   {item.media_poster_url
                     ? <img src={item.media_poster_url} className="w-14 h-20 object-cover" alt={item.media_title} />
@@ -469,7 +523,7 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  {isOwnProfile && (
+                  {isOwnProfile && item.item_kind !== 'sent' && (
                     <div className="flex items-center justify-between gap-2 mt-2">
                       <StatusSelect
                         value={item.status}
@@ -620,13 +674,18 @@ export default function ProfilePage() {
   )
 }
 
-function StatCard({ emoji, label, value }) {
+function StatCard({ emoji, label, value, active = false, onClick }) {
+  const Component = onClick ? 'button' : 'div'
   return (
-    <div className="glass rounded-2xl p-3 text-center">
+    <Component
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`glass btn-press rounded-2xl p-3 text-center transition-all ${onClick ? 'cursor-pointer hover:border-white/50' : ''} ${active ? 'ring-2 ring-white/80 bg-white/20' : ''}`}
+    >
       <p className="text-xl mb-0.5">{emoji}</p>
       <p className="text-xl font-extrabold text-white">{value}</p>
       <p className="text-white/50 text-[10px] font-semibold mt-0.5">{label}</p>
-    </div>
+    </Component>
   )
 }
 

@@ -89,7 +89,7 @@ export default function FriendsPage() {
             value={searchQuery}
             onChange={e => search(e.target.value)}
             placeholder="Search by username…"
-            className="input-glass pl-10"
+            className="input-glass input-search"
           />
         </div>
 
