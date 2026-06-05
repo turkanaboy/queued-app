@@ -63,7 +63,7 @@ export default function CollectionPage() {
 
   return (
     <div className="pb-5">
-      <ScreenHeader title="Discover" subtitle="Find what to queue or rate next" />
+      <ScreenHeader title="Search" subtitle="Find what to queue or mark finished" />
       <MediumTabs value={medium} counts={counts} onChange={setMedium} />
 
       <div className="space-y-5 px-[18px] pt-4">

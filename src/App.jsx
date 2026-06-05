@@ -7,6 +7,7 @@ import SharedListPage from './pages/SharedListPage'
 import AddRecommendationPage from './pages/AddRecommendationPage'
 import ProfilePage from './pages/ProfilePage'
 import CollectionPage from './pages/CollectionPage'
+import QueuedUpPage from './pages/QueuedUpPage'
 import Layout from './components/Layout'
 
 function RequireAuth({ children }) {
@@ -46,6 +47,7 @@ function AppRoutes() {
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/list/:friendId" element={<SharedListPage />} />
           <Route path="/add" element={<AddRecommendationPage />} />
+          <Route path="/queued" element={<QueuedUpPage />} />
           <Route path="/collection" element={<CollectionPage />} />
           <Route path="/profile/:userId?" element={<ProfilePage />} />
         </Route>

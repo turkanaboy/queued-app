@@ -12,7 +12,6 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   async function save() {
-    if (!rating) return
     setSaving(true)
     await supabase.from('user_media_log').upsert({
       user_id: session.user.id,
@@ -21,7 +20,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
       media_title: item.media_title,
       media_creator: item.media_creator ?? null,
       media_poster_url: item.media_poster_url,
-      rating,
+      rating: rating ?? null,
       status: 'finished',
       review: comment.trim() || null,
       source_type: existingEntry?.source_type ?? 'self',
@@ -32,7 +31,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   }
 
   return (
-    <SheetShell onClose={onClose} title="Rate & finish">
+    <SheetShell onClose={onClose} title="Mark finished">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <PosterTile item={item} w={56} h={82} radius={14} />
@@ -43,7 +42,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
         </div>
 
         <div>
-          <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Rating</p>
+          <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Rating optional</p>
           <div className="grid grid-cols-10 gap-1.5">
             {[1,2,3,4,5,6,7,8,9,10].map(n => {
               const active = rating && n <= rating
@@ -63,7 +62,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
 
         <div className="grid grid-cols-2 gap-3">
           <button onClick={onClose} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">Cancel</button>
-          <button onClick={save} disabled={!rating || saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Mark finished'}</button>
+          <button onClick={save} disabled={saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Mark finished'}</button>
         </div>
       </div>
     </SheetShell>

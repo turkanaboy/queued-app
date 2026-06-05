@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
+import { TASTE_GENRE_GROUPS, WATCHING_STYLES } from '../lib/taste'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 import {
@@ -45,6 +46,9 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('')
   const [editingPlatforms, setEditingPlatforms] = useState(false)
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
+  const [editingTaste, setEditingTaste] = useState(false)
+  const [selectedGenres, setSelectedGenres] = useState([])
+  const [watchingStyle, setWatchingStyle] = useState(null)
   const [saving, setSaving] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [medium, setMedium] = useState('movie')
@@ -68,6 +72,8 @@ export default function ProfilePage() {
     setProfile(data)
     setDisplayName(data?.display_name || '')
     setSelectedPlatforms(data?.platforms ?? [])
+    setSelectedGenres(data?.favorite_genres ?? [])
+    setWatchingStyle(data?.watching_style ?? null)
     setLoading(false)
   }
 
@@ -172,7 +178,7 @@ export default function ProfilePage() {
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ user_id: session.user.id }),
+      body: JSON.stringify({ user_id: session.user.id, force_new: true }),
     })
     const json = await res.json()
     setBotResult(json)
@@ -198,6 +204,15 @@ export default function ProfilePage() {
     setSaving(false)
   }
 
+  async function saveTaste() {
+    setSaving(true)
+    await supabase.from('users').update({ favorite_genres: selectedGenres, watching_style: watchingStyle }).eq('id', session.user.id)
+    await refreshProfile()
+    setEditingTaste(false)
+    fetchProfile()
+    setSaving(false)
+  }
+
   async function doSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
@@ -205,6 +220,10 @@ export default function ProfilePage() {
 
   function togglePlatform(id) {
     setSelectedPlatforms(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id])
+  }
+
+  function toggleGenre(genre) {
+    setSelectedGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre])
   }
 
   const allItems = useMemo(() => {
@@ -311,6 +330,21 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {isOwnProfile && (
+        <div className="px-[18px] pb-4">
+          <TasteSection
+            editing={editingTaste}
+            setEditing={setEditingTaste}
+            selectedGenres={selectedGenres}
+            toggleGenre={toggleGenre}
+            watchingStyle={watchingStyle}
+            setWatchingStyle={setWatchingStyle}
+            save={saveTaste}
+            saving={saving}
+          />
+        </div>
+      )}
 
       <MediumTabs value={medium} counts={counts} onChange={next => { setMedium(next); setStatusFilter('all'); setShowBreakdown(false) }} />
 
@@ -502,7 +536,12 @@ function BotStrip({ loading, active, result, onAsk, onDismiss, onStatusChange })
     )
   }
   if (active) {
-    return <div className="rounded-2xl border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-[12.5px] font-semibold text-[rgba(214,240,224,0.7)]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#D8A84A]" />Bot is waiting on {active.media_title} — mark it done for a new pick.</div>
+    return (
+      <button onClick={onAsk} className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-left">
+        <span className="min-w-0 text-[12.5px] font-semibold text-[rgba(214,240,224,0.7)]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#D8A84A]" />Current bot pick: {active.media_title}</span>
+        <span className="shrink-0 text-xs font-bold text-[#D8A84A]">New pick</span>
+      </button>
+    )
   }
   return (
     <button onClick={onAsk} className="btn-press flex w-full items-center justify-between rounded-2xl border border-dashed border-[#2DD48F]/35 px-4 py-3 text-left">
@@ -527,6 +566,85 @@ function QueueRow({ item, own, first, onOpen, onStatus, onDelete }) {
       </div>
       {own && item.item_kind !== 'sent' ? <StatusMenu value={item.status} onChange={onStatus} /> : <span className="font-mono-q text-[10px] text-[rgba(214,240,224,0.5)]">{STATUS[item.status]?.short}</span>}
     </div>
+  )
+}
+
+function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, watchingStyle, setWatchingStyle, save, saving }) {
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="btn-press flex w-full items-center justify-between rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-left shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]"
+      >
+        <span>
+          <span className="block text-sm font-extrabold text-[#F7F1E4]">Customize your experience</span>
+          <span className="mt-0.5 block text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">
+            {selectedGenres.length ? `${selectedGenres.length} taste picks saved` : 'Tune genres and recommendation style'}
+          </span>
+        </span>
+        <span className="text-[#D8A84A]">Edit</span>
+      </button>
+    )
+  }
+
+  return (
+    <section className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-4 shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-extrabold text-[#F7F1E4]">Customize your experience</p>
+          <p className="mt-0.5 text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">These answers guide Queued Bot.</p>
+        </div>
+        <button onClick={() => setEditing(false)} className="btn-press text-xl leading-none text-[rgba(214,240,224,0.5)]">x</button>
+      </div>
+
+      <div className="space-y-3">
+        {TASTE_GENRE_GROUPS.map(group => (
+          <div key={group.key}>
+            <p className="font-mono-q mb-1.5 text-[10px] font-bold uppercase tracking-[1.4px] text-[rgba(214,240,224,0.42)]">{group.label}</p>
+            <div className="flex flex-wrap gap-2">
+              {group.genres.map(genre => {
+                const active = selectedGenres.includes(genre)
+                return (
+                  <button
+                    key={`${group.key}-${genre}`}
+                    type="button"
+                    onClick={() => toggleGenre(genre)}
+                    className={`btn-press rounded-full border px-3 py-1.5 text-xs font-bold ${active ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-[rgba(214,240,224,0.7)]'}`}
+                  >
+                    {genre}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        <p className="font-mono-q mb-2 text-[10px] font-bold uppercase tracking-[1.4px] text-[rgba(214,240,224,0.42)]">Style</p>
+        <div className="grid grid-cols-2 gap-2">
+          {WATCHING_STYLES.map(style => {
+            const active = watchingStyle === style.value
+            return (
+              <button
+                key={style.value}
+                type="button"
+                onClick={() => setWatchingStyle(active ? null : style.value)}
+                className={`btn-press rounded-[14px] border px-3 py-2 text-left text-xs font-bold ${active ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-[#F7F1E4]'}`}
+              >
+                <span className="font-mono-q mr-1 opacity-60">{style.icon}</span>
+                {style.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <button onClick={save} disabled={saving} className="btn-press btn-cream rounded-xl px-4 py-2 text-xs font-bold">{saving ? 'Saving...' : 'Save'}</button>
+        <button onClick={() => setEditing(false)} className="btn-press btn-outline-cream rounded-xl px-4 py-2 text-xs">Cancel</button>
+      </div>
+    </section>
   )
 }
 

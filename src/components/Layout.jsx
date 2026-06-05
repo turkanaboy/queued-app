@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useUnreadCount } from '../hooks/useUnreadCount'
+import { useAuth } from '../hooks/useAuth'
+import LogMediaSheet from './LogMediaSheet'
 
 export default function Layout() {
   const unreadCount = useUnreadCount()
+  const { session } = useAuth()
+  const [showAddSheet, setShowAddSheet] = useState(false)
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -16,19 +21,20 @@ export default function Layout() {
             <FriendsIcon />
           </TabItem>
 
-          <TabItem to="/collection" label="Discover">
+          <TabItem to="/queued" label="Queued Up">
             <DiscoverIcon />
           </TabItem>
 
-          <NavLink
-            to="/add"
+          <button
+            type="button"
+            onClick={() => setShowAddSheet(true)}
             className="btn-press -mt-[22px] flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[rgba(216,168,74,0.36)] bg-[linear-gradient(135deg,#C96B4B,#B87333)] text-[#FFF8E8] shadow-[0_8px_22px_rgba(0,0,0,0.35)]"
-            aria-label="Recommend"
+            aria-label="Add title"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
             </svg>
-          </NavLink>
+          </button>
 
           <TabItem to="/collection" label="Search">
             <SearchIcon />
@@ -39,6 +45,14 @@ export default function Layout() {
           </TabItem>
         </div>
       </nav>
+
+      {showAddSheet && session?.user?.id && (
+        <LogMediaSheet
+          userId={session.user.id}
+          onClose={() => setShowAddSheet(false)}
+          onSaved={() => {}}
+        />
+      )}
     </div>
   )
 }

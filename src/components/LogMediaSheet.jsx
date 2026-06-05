@@ -19,6 +19,8 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [searching, setSearching] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [rating, setRating] = useState(null)
+  const [review, setReview] = useState('')
   const debounceRef = useRef(null)
 
   async function search(q, type = searchType) {
@@ -56,9 +58,9 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       media_title: selected.media_title,
       media_creator: selected.media_creator ?? null,
       media_poster_url: selected.media_poster_url,
-      rating: null,
+      rating: status === 'finished' ? rating : null,
       status,
-      review: null,
+      review: status === 'finished' ? (review.trim() || null) : null,
       source_type: 'self',
     }, { onConflict: 'user_id,media_id' })
     if (error) { setError(error.message); setSaving(false); return }
@@ -101,10 +103,27 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
               <button onClick={() => setSelected(null)} className="btn-press mt-1 text-xs font-bold text-[#D8A84A]">← Pick another</button>
             </div>
           </div>
+          <div>
+            <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Optional rating</p>
+            <div className="grid grid-cols-10 gap-1.5">
+              {[1,2,3,4,5,6,7,8,9,10].map(n => {
+                const active = rating && n <= rating
+                return (
+                  <button key={n} onClick={() => setRating(rating === n ? null : n)}
+                    className={`font-mono-q btn-press h-[30px] rounded-[7px] text-[11px] font-semibold ${active ? 'text-[#052016]' : 'text-[rgba(214,240,224,0.55)]'}`}
+                    style={{ background: active ? 'linear-gradient(180deg, #E7C674, #C99A52)' : 'rgba(2,17,12,0.5)', boxShadow: active ? 'none' : 'inset 0 1px 0 rgba(244,233,209,0.08)' }}>
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <textarea value={review} onChange={e => setReview(e.target.value.slice(0, 1000))} rows={3} placeholder="Review (optional)"
+            className="w-full resize-none rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] px-3.5 py-3 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
           {error && <p className="text-sm text-rose-300">{error}</p>}
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => handleSave('finished')} disabled={saving} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">I've finished it</button>
-            <button onClick={() => handleSave('queued')} disabled={saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Add to queue'}</button>
+            <button onClick={() => handleSave('queued')} disabled={saving} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">Add to queue</button>
+            <button onClick={() => handleSave('finished')} disabled={saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Mark finished'}</button>
           </div>
         </div>
       )}

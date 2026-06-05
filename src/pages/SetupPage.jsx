@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
-
-const GENRES = ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Romance', 'Thriller', 'Documentary', 'Animation', 'Fantasy']
+import { TASTE_GENRE_GROUPS } from '../lib/taste'
 
 const WATCHING_STYLES = [
   { value: 'solo',     label: 'Solo viewer',   emoji: '🧑' },
@@ -173,13 +172,14 @@ export default function SetupPage() {
             <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-1">
               Favorite genres
             </label>
-            <p className="text-white/40 text-xs mb-3">Pick as many as you like</p>
+            <p className="text-white/40 text-xs mb-3">Pick across movies, TV, books, and music</p>
             <div className="flex flex-wrap gap-2">
-              {GENRES.map(g => {
+              {TASTE_GENRE_GROUPS.flatMap(group => group.genres.map(g => `${group.key}:${g}`)).map(keyedGenre => {
+                const [groupKey, g] = keyedGenre.split(':')
                 const active = selectedGenres.includes(g)
                 return (
                   <button
-                    key={g}
+                    key={`${groupKey}-${g}`}
                     type="button"
                     onClick={() => toggleGenre(g)}
                     className="btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
