@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 
-const TYPE_ICON = { movie: '🎬', tv: '📺', book: '📚', album: '🎵' }
+const TYPE_LABEL = { movie: 'Movie', tv: 'TV', book: 'Book', album: 'Album' }
 
 export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   const { session } = useAuth()
   const [rating, setRating] = useState(existingEntry?.rating ?? null)
-  const [step, setStep] = useState('rate')
+  const [step, setStep] = useState(existingEntry ? 'rate' : 'choose')
   const [comment, setComment] = useState(existingEntry?.review ?? '')
   const [saving, setSaving] = useState(false)
 
@@ -25,7 +25,6 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
       media_poster_url: item.media_poster_url,
       rating,
       status:           'finished',
-      // When skipping, preserve any existing review rather than wiping it
       review: withComment
         ? (comment.trim() || null)
         : (existingEntry?.review ?? null),
@@ -68,15 +67,14 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
           </div>
 
           <div className="px-6 space-y-5">
-            {/* Title row */}
             <div className="flex items-center gap-4">
               {item.media_poster_url ? (
                 <img src={item.media_poster_url} alt={item.media_title}
                   className={`object-cover rounded-2xl shadow-lg shrink-0 ${isAlbum ? 'w-16 h-16' : 'w-14 h-20'}`} />
               ) : (
-                <div className={`rounded-2xl flex items-center justify-center text-3xl shrink-0 ${isAlbum ? 'w-16 h-16' : 'w-14 h-20'}`}
+                <div className={`rounded-2xl flex items-center justify-center text-sm font-bold text-white/60 shrink-0 ${isAlbum ? 'w-16 h-16' : 'w-14 h-20'}`}
                   style={{ background: 'rgba(255,255,255,0.15)' }}>
-                  {TYPE_ICON[item.media_type] ?? '🎬'}
+                  {TYPE_LABEL[item.media_type] ?? 'Media'}
                 </div>
               )}
               <div className="min-w-0 flex-1">
@@ -85,86 +83,96 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                   <p className="text-white/60 text-sm mt-0.5">{item.media_creator}</p>
                 )}
                 <p className="text-white/40 text-xs capitalize mt-0.5">
-                  {item.media_type}{item.year ? ` · ${item.year}` : ''}
+                  {TYPE_LABEL[item.media_type] ?? item.media_type}{item.year ? ` · ${item.year}` : ''}
                 </p>
-                {existingEntry && (
-                  <p className="text-white/40 text-xs mt-1">Updating your rating</p>
+                {existingEntry ? (
+                  <p className="text-white/40 text-xs mt-1">
+                    {existingEntry.rating ? 'Updating your finished log' : 'Queued - log it when finished'}
+                  </p>
+                ) : (
+                  <p className="text-white/40 text-xs mt-1">Queue it or log it as finished.</p>
                 )}
               </div>
-              <button onClick={onClose} className="btn-press text-white/40 hover:text-white ml-auto shrink-0 p-1 text-xl">✕</button>
+              <button onClick={onClose} className="btn-press text-white/40 hover:text-white ml-auto shrink-0 p-1 text-xl">x</button>
             </div>
 
-            {/* Star rating — 5 stars with left/right click zones for half-star precision */}
-            <div>
-              <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Your rating</p>
-              <div className="flex items-center justify-center gap-1">
-                {[1, 2, 3, 4, 5].map(star => {
-                  const halfVal = star - 0.5
-                  const isFull = rating !== null && rating >= star
-                  const isHalf = rating !== null && !isFull && rating >= halfVal
-                  return (
-                    <div
-                      key={star}
-                      className="relative select-none"
-                      style={{ fontSize: '2.4rem', lineHeight: 1, width: '2.6rem', height: '2.6rem' }}
-                    >
-                      {/* Empty base */}
-                      <span className="absolute inset-0 flex items-center justify-center text-white/20 pointer-events-none">
-                        ★
-                      </span>
-                      {/* Amber fill — clipped to left half when half-star */}
-                      {(isFull || isHalf) && (
-                        <span
-                          className="absolute inset-0 flex items-center justify-center text-amber-300 pointer-events-none"
-                          style={isHalf ? { clipPath: 'inset(0 50% 0 0)' } : {}}
-                        >
-                          ★
-                        </span>
-                      )}
-                      {/* Left half click → half value */}
-                      <button
-                        className="absolute left-0 top-0 w-1/2 h-full btn-press"
-                        onClick={() => setRating(halfVal === rating ? null : halfVal)}
-                      />
-                      {/* Right half click → full value */}
-                      <button
-                        className="absolute right-0 top-0 w-1/2 h-full btn-press"
-                        onClick={() => setRating(star === rating ? null : star)}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-              {rating && (
-                <p className="text-center text-white/60 text-sm mt-2 font-semibold">{rating} / 5</p>
-              )}
-            </div>
-
-            {/* Action buttons after rating selected */}
-            {step === 'rate' && rating && (
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setStep('comment')}
-                  className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21]"
+            {step === 'choose' && (
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={addToQueue} disabled={saving}
+                  className="btn-press py-4 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
                   style={{ background: 'white' }}>
-                  Add a comment
+                  {saving ? 'Saving...' : 'Add to queue'}
                 </button>
-                <button onClick={() => save(false)} disabled={saving}
-                  className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-white border border-white/30 disabled:opacity-40"
-                  style={{ background: 'rgba(255,255,255,0.15)' }}>
-                  {saving ? 'Saving…' : 'Skip for now'}
+                <button onClick={() => setStep('rate')}
+                  className="btn-press py-4 rounded-2xl font-bold text-sm text-white border border-white/30"
+                  style={{ background: 'rgba(255,255,255,0.14)' }}>
+                  Rate / log
                 </button>
               </div>
             )}
 
-            {step === 'rate' && !rating && !existingEntry && (
-              <button onClick={addToQueue} disabled={saving}
-                className="btn-press w-full py-3.5 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
-                style={{ background: 'white' }}>
-                {saving ? 'Saving…' : 'Add to queue'}
-              </button>
+            {step !== 'choose' && (
+              <>
+                <div>
+                  <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">Rating to mark finished</p>
+                  <div className="flex items-center justify-center gap-1">
+                    {[1, 2, 3, 4, 5].map(star => {
+                      const halfVal = star - 0.5
+                      const isFull = rating !== null && rating >= star
+                      const isHalf = rating !== null && !isFull && rating >= halfVal
+                      return (
+                        <div
+                          key={star}
+                          className="relative select-none"
+                          style={{ fontSize: '2.4rem', lineHeight: 1, width: '2.6rem', height: '2.6rem' }}
+                        >
+                          <span className="absolute inset-0 flex items-center justify-center text-white/20 pointer-events-none">
+                            *
+                          </span>
+                          {(isFull || isHalf) && (
+                            <span
+                              className="absolute inset-0 flex items-center justify-center text-amber-300 pointer-events-none"
+                              style={isHalf ? { clipPath: 'inset(0 50% 0 0)' } : {}}
+                            >
+                              *
+                            </span>
+                          )}
+                          <button
+                            className="absolute left-0 top-0 w-1/2 h-full btn-press"
+                            onClick={() => setRating(halfVal === rating ? null : halfVal)}
+                          />
+                          <button
+                            className="absolute right-0 top-0 w-1/2 h-full btn-press"
+                            onClick={() => setRating(star === rating ? null : star)}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {rating ? (
+                    <p className="text-center text-white/60 text-sm mt-2 font-semibold">{rating} / 5</p>
+                  ) : (
+                    <p className="text-center text-white/30 text-sm mt-2">Tap left half for 1/2, right half for full</p>
+                  )}
+                </div>
+
+                {step === 'rate' && rating && (
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setStep('comment')}
+                      className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21]"
+                      style={{ background: 'white' }}>
+                      Add comment
+                    </button>
+                    <button onClick={() => save(false)} disabled={saving}
+                      className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-white border border-white/30 disabled:opacity-40"
+                      style={{ background: 'rgba(255,255,255,0.15)' }}>
+                      {saving ? 'Saving...' : 'Log finished'}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Comment step */}
             {step === 'comment' && (
               <div className="space-y-3">
                 <div className="relative">
@@ -180,19 +188,15 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
                   <button onClick={() => save(true)} disabled={saving}
                     className="btn-press flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#040C21] disabled:opacity-40"
                     style={{ background: 'white' }}>
-                    {saving ? 'Saving…' : 'Save to my collection 📝'}
+                    {saving ? 'Saving...' : 'Save finished log'}
                   </button>
                   <button onClick={() => save(false)} disabled={saving}
                     className="btn-press py-3.5 px-4 rounded-2xl text-sm text-white/60 border border-white/20 disabled:opacity-40"
                     style={{ background: 'rgba(255,255,255,0.1)' }}>
-                    Skip
+                    Log without comment
                   </button>
                 </div>
               </div>
-            )}
-
-            {!rating && (
-              <p className="text-center text-white/30 text-sm pb-2">Tap left half of a star for ½, right half for full</p>
             )}
           </div>
         </div>
