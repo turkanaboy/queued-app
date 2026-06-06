@@ -28,6 +28,11 @@ import {
 
 const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
 
+function personalLogStatus(entry, fallback) {
+  if (!entry) return fallback
+  return entry.status ?? (entry.rating ? 'finished' : 'queued')
+}
+
 export default function ProfilePage() {
   const { userId } = useParams()
   const { session, refreshProfile } = useAuth()
@@ -258,8 +263,8 @@ export default function ProfilePage() {
           media_poster_url: rec.media_poster_url,
           rating: rec.rating ?? logEntry?.rating ?? null,
           review: logEntry?.review ?? null,
-          status: rec.recipient_status,
-          created_at: rec.created_at,
+          status: personalLogStatus(logEntry, rec.recipient_status),
+          created_at: logEntry?.created_at ?? rec.created_at,
           origin: rec.sender_id === BOT_USER_ID ? 'Queued Bot' : (rec.sender?.display_name || rec.sender?.username || 'friend'),
           origin_type: rec.sender_id === BOT_USER_ID ? 'bot' : 'recommendation',
           origin_user_id: rec.sender_id,
