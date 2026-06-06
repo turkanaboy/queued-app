@@ -141,6 +141,14 @@ function mapTmdbResult(r: any, mediaType: string) {
   }
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function uniqueMediaResults(results: any[], limit = 12) {
+  return [...new Map(results.map((item: any) => [`${item.media_type}:${item.media_id}`, item])).values()].slice(0, limit)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -230,18 +238,39 @@ serve(async (req) => {
 
   // Books via Open Library
   if (type === 'book') {
-    const res  = await fetch(`${OL_BASE}/search.json?q=${encodeURIComponent(query)}&fields=key,title,author_name,cover_i,first_publish_year&limit=10`)
-    const data = await res.json()
-    const results = (data.docs ?? []).filter((d: any) => d.cover_i).slice(0, 10).map(mapBook)
-    return json({ results })
+    const fields = 'key,title,author_name,cover_i,first_publish_year'
+    const [titleRes, authorRes] = await Promise.all([
+      fetch(`${OL_BASE}/search.json?q=${encodeURIComponent(query)}&fields=${fields}&limit=12`),
+      fetch(`${OL_BASE}/search.json?author=${encodeURIComponent(query)}&fields=${fields}&limit=12`),
+    ])
+    const [titleData, authorData] = await Promise.all([titleRes.json(), authorRes.json()])
+    const authorResults = (authorData.docs ?? []).filter((d: any) => d.cover_i).map(mapBook)
+    const titleResults = (titleData.docs ?? []).filter((d: any) => d.cover_i).map(mapBook)
+    return json({ results: uniqueMediaResults([...authorResults, ...titleResults], 12) })
   }
 
   // Albums via iTunes
   if (type === 'album') {
-    const res  = await fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(query)}&entity=album&media=music&limit=10&country=US`)
-    const data = await res.json()
-    const results = (data.results ?? []).filter((r: any) => r.artworkUrl100).slice(0, 10).map(mapItunesAlbum)
-    return json({ results })
+    const [titleRes, artistAlbumRes, artistRes] = await Promise.all([
+      fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(query)}&entity=album&media=music&limit=12&country=US`),
+      fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(query)}&entity=album&media=music&attribute=artistTerm&limit=12&country=US`),
+      fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(query)}&entity=allArtist&attribute=artistTerm&limit=5&country=US`),
+    ])
+    const [titleData, artistAlbumData, artistData] = await Promise.all([titleRes.json(), artistAlbumRes.json(), artistRes.json()])
+    const artistIds = (artistData.results ?? [])
+      .filter((r: any) => r.wrapperType === 'artist' && r.artistId)
+      .slice(0, 3)
+      .map((r: any) => r.artistId)
+    const lookupData = await Promise.all(artistIds.map((id: number) =>
+      fetch(`${ITUNES_BASE}/lookup?id=${id}&entity=album&limit=12&country=US`).then(res => res.json())
+    ))
+    const artistLookupAlbums = lookupData
+      .flatMap((data: any) => data.results ?? [])
+      .filter((r: any) => r.collectionType === 'Album' && r.artworkUrl100)
+      .map(mapItunesAlbum)
+    const artistAlbums = (artistAlbumData.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
+    const titleAlbums = (titleData.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
+    return json({ results: uniqueMediaResults([...artistLookupAlbums, ...artistAlbums, ...titleAlbums], 12) })
   }
 
   // Movies / TV via TMDB
@@ -256,20 +285,35 @@ serve(async (req) => {
     .map((r: any) => mapTmdbResult(r, type))
 
   let peopleResults: any[] = []
+  let personNameMatched = false
   if (type === 'movie' || type === 'tv' || type === 'multi') {
     const peopleRes = await fetch(`${TMDB_BASE}/search/person?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`)
     const peopleData = await peopleRes.json()
-    const personIds = (peopleData.results ?? []).slice(0, 3).map((person: any) => person.id)
-    const creditResponses = await Promise.all(personIds.map((id: number) =>
-      fetch(`${TMDB_BASE}/person/${id}/combined_credits?api_key=${apiKey}&language=en-US`).then(res => res.json())
+    const normalizedQuery = normalizeText(query)
+    const people = (peopleData.results ?? []).slice(0, 3)
+    personNameMatched = people.some((person: any) => {
+      const name = normalizeText(person.name)
+      return name.includes(normalizedQuery) || normalizedQuery.includes(name)
+    })
+    const knownFor = people
+      .flatMap((person: any) => person.known_for ?? [])
+      .map((r: any) => ({ ...r, media_type: r.media_type ?? (r.title ? 'movie' : 'tv') }))
+
+    const creditPath = type === 'movie' ? 'movie_credits' : type === 'tv' ? 'tv_credits' : 'combined_credits'
+    const creditResponses = await Promise.all(people.map((person: any) =>
+      fetch(`${TMDB_BASE}/person/${person.id}/${creditPath}?api_key=${apiKey}&language=en-US`).then(res => res.json())
     ))
-    peopleResults = creditResponses
+    peopleResults = [...knownFor, ...creditResponses
       .flatMap((credits: any) => [...(credits.cast ?? []), ...(credits.crew ?? [])])
+      .map((r: any) => ({ ...r, media_type: r.media_type ?? (r.title ? 'movie' : 'tv') }))]
       .filter((r: any) => (type === 'multi' || r.media_type === type) && (r.media_type === 'movie' || r.media_type === 'tv') && (r.title || r.name) && r.poster_path)
+      .sort((a: any, b: any) => (b.popularity ?? 0) - (a.popularity ?? 0))
       .slice(0, 12)
       .map((r: any) => mapTmdbResult(r, r.media_type))
   }
 
-  const results = [...new Map([...titleResults, ...peopleResults].map((item: any) => [`${item.media_type}:${item.media_id}`, item])).values()].slice(0, 12)
+  const results = personNameMatched
+    ? uniqueMediaResults([...peopleResults, ...titleResults], 12)
+    : uniqueMediaResults([...titleResults, ...peopleResults], 12)
   return json({ results })
 })
