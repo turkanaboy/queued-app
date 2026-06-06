@@ -172,6 +172,15 @@ export default function ProfilePage() {
     fetchStats()
   }
 
+  function handleLogSheetSaved(item) {
+    if (item?.media_type) {
+      setMedium(item.media_type)
+      setStatusFilter('all')
+    }
+    fetchMediaLog()
+    fetchStats()
+  }
+
   async function requestBotRecommendation() {
     setBotLoading(true)
     setBotResult(null)
@@ -233,10 +242,11 @@ export default function ProfilePage() {
   }
 
   const allItems = useMemo(() => {
-    const logByMediaId = new Map(mediaLog.map(item => [item.media_id, item]))
+    const mediaKey = item => `${item.media_type}:${item.media_id}`
+    const logByMediaId = new Map(mediaLog.map(item => [mediaKey(item), item]))
     return [
       ...recommendationQueue.map(rec => {
-        const logEntry = logByMediaId.get(rec.media_id)
+        const logEntry = logByMediaId.get(mediaKey(rec))
         return {
           id: logEntry?.id ?? `rec-${rec.id}`,
           recommendation_id: rec.id,
@@ -275,7 +285,7 @@ export default function ProfilePage() {
         origin_user_id: rec.recipient_id,
       })),
       ...mediaLog
-        .filter(item => !recommendationQueue.some(rec => rec.media_id === item.media_id))
+        .filter(item => !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item)))
         .map(item => ({
           ...item,
           item_kind: 'log',
@@ -463,7 +473,7 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {showLogSheet && <LogMediaSheet userId={session.user.id} onClose={() => setShowLogSheet(false)} onSaved={() => { fetchMediaLog(); fetchStats() }} />}
+      {showLogSheet && <LogMediaSheet userId={session.user.id} onClose={() => setShowLogSheet(false)} onSaved={handleLogSheetSaved} />}
       {editingLogItem && <RatingModal item={editingLogItem} existingEntry={editingLogItem} onClose={() => setEditingLogItem(null)} onSaved={() => { fetchMediaLog(); fetchStats(); setEditingLogItem(null) }} />}
     </div>
   )

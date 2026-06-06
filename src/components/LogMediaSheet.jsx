@@ -85,7 +85,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       streaming_providers: providers ?? [],
     })
     if (error) { setError(error.message); setSaving(false); return }
-    onSaved?.()
+    onSaved?.({ ...selected, status })
     onClose()
   }
 
