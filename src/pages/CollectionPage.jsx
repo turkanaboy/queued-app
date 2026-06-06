@@ -39,6 +39,7 @@ export default function CollectionPage() {
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState([])
   const [genre, setGenre] = useState('all')
+  const [saveError, setSaveError] = useState('')
   const searchDebounceRef = useRef(null)
   const sectionRequestRef = useRef({})
 
@@ -91,6 +92,7 @@ export default function CollectionPage() {
   }
 
   async function upsertLog(item, status, rating = null, review = null, providersOverride) {
+    setSaveError('')
     const providers = ['movie', 'tv'].includes(item.media_type)
       ? providersOverride ?? (await fetchProviders(item))
       : []
@@ -107,7 +109,11 @@ export default function CollectionPage() {
       source_type: 'self',
       streaming_providers: providers,
     })
-    if (!error) fetchUserLog()
+    if (error) {
+      setSaveError(error.message)
+      return
+    }
+    fetchUserLog()
   }
 
   async function openLogSheet(item) {
@@ -192,6 +198,7 @@ export default function CollectionPage() {
             </button>
           </div>
         </div>
+        {saveError && <p className="rounded-[14px] border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{saveError}</p>}
 
         {(loading[medium] || searching) && activeItems.length === 0 ? (
           <div className="grid grid-cols-3 gap-3">

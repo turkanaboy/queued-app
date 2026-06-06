@@ -1,9 +1,16 @@
 import { supabase } from './supabase'
 
 export async function upsertMediaLog(row) {
+  const payload = Object.fromEntries(
+    Object.entries({
+      ...row,
+      created_at: row.created_at ?? new Date().toISOString(),
+    }).filter(([, value]) => value !== undefined)
+  )
+
   const { error } = await supabase
     .from('user_media_log')
-    .upsert(row, { onConflict: 'user_id,media_type,media_id' })
+    .upsert(payload, { onConflict: 'user_id,media_type,media_id' })
 
   if (!error) return { error: null }
 
@@ -12,5 +19,5 @@ export async function upsertMediaLog(row) {
 
   return supabase
     .from('user_media_log')
-    .upsert(row, { onConflict: 'user_id,media_id' })
+    .upsert(payload, { onConflict: 'user_id,media_id' })
 }
