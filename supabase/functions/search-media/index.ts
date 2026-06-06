@@ -61,6 +61,10 @@ const ALBUM_TERMS: Record<string, string> = {
   Soul: 'soul',
 }
 
+const NORMALIZED_TMDB_GENRES = Object.fromEntries(Object.entries(TMDB_GENRES).map(([key, value]) => [normalizeText(key), value]))
+const NORMALIZED_BOOK_SUBJECTS = Object.fromEntries(Object.entries(BOOK_SUBJECTS).map(([key, value]) => [normalizeText(key), value]))
+const NORMALIZED_ALBUM_TERMS = Object.fromEntries(Object.entries(ALBUM_TERMS).map(([key, value]) => [normalizeText(key), value]))
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -145,6 +149,11 @@ function normalizeText(value: string | null | undefined) {
   return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
+function normalizedLookup<T>(map: Record<string, T>, key: string | null) {
+  if (!key) return null
+  return map[normalizeText(key)] ?? null
+}
+
 function uniqueMediaResults(results: any[], limit = 12) {
   return [...new Map(results.map((item: any) => [`${item.media_type}:${item.media_id}`, item])).values()].slice(0, limit)
 }
@@ -165,7 +174,7 @@ serve(async (req) => {
 
     // Books — Open Library weekly trending
     if (mediaType === 'book') {
-      const subject = genre ? BOOK_SUBJECTS[genre] : null
+      const subject = normalizedLookup(NORMALIZED_BOOK_SUBJECTS, genre)
       const res  = await fetch(subject ? `${OL_BASE}/subjects/${subject}.json?limit=24&offset=${offset}` : `${OL_BASE}/trending/weekly.json?limit=24&offset=${offset}`)
       const data = await res.json()
       const results = subject
@@ -182,7 +191,7 @@ serve(async (req) => {
         const results = (data.feed?.entry ?? []).map(mapItunesRssEntry).filter((r: any) => r.media_poster_url)
         return json({ results, total_pages: 5 })
       }
-      const term = genre ? ALBUM_TERMS[genre] ?? genre : 'new music'
+      const term = normalizedLookup(NORMALIZED_ALBUM_TERMS, genre) ?? genre ?? 'new music'
       const res  = await fetch(`${ITUNES_BASE}/search?term=${encodeURIComponent(term)}&entity=album&media=music&limit=24&offset=${offset}&country=US`)
       const data = await res.json()
       const results = (data.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
@@ -190,7 +199,7 @@ serve(async (req) => {
     }
 
     // Movies / TV — TMDB weekly trending
-    const genreId = genre ? TMDB_GENRES[genre] : null
+    const genreId = normalizedLookup(NORMALIZED_TMDB_GENRES, genre)
     const tmdbUrl = genreId
       ? `${TMDB_BASE}/discover/${mediaType}?api_key=${apiKey}&page=${page}&language=en-US&include_adult=false&sort_by=popularity.desc&with_genres=${genreId}`
       : `${TMDB_BASE}/trending/${mediaType}/week?api_key=${apiKey}&page=${page}&language=en-US`

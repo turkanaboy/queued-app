@@ -40,6 +40,7 @@ export default function CollectionPage() {
   const [searchResults, setSearchResults] = useState([])
   const [genre, setGenre] = useState('all')
   const searchDebounceRef = useRef(null)
+  const sectionRequestRef = useRef({})
 
   useEffect(() => {
     MEDIA_ORDER.forEach(type => loadSection(type, 1, 'all'))
@@ -66,11 +67,14 @@ export default function CollectionPage() {
   }
 
   async function loadSection(mediaType, page, nextGenre = genre) {
+    const requestKey = `${nextGenre}:${page}`
+    sectionRequestRef.current[mediaType] = requestKey
     setLoading(prev => ({ ...prev, [mediaType]: true }))
     const json = await fetchTrending(mediaType, page, nextGenre)
+    if (sectionRequestRef.current[mediaType] !== requestKey) return
     setItems(prev => {
       const next = page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])]
-      return { ...prev, [mediaType]: [...new Map(next.map(item => [item.media_id, item])).values()] }
+      return { ...prev, [mediaType]: [...new Map(next.map(item => [mediaKey(item), item])).values()] }
     })
     setPages(prev => ({ ...prev, [mediaType]: page }))
     setLoading(prev => ({ ...prev, [mediaType]: false }))
