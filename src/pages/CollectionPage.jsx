@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
-import { RecommendationSheet, ProviderRows } from './AddRecommendationPage'
+import { RecommendationSheet } from './AddRecommendationPage'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
-import { Chip, EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle, SearchField, SheetShell } from '../lib/queuedDesign'
+import { Chip, EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle, SearchField } from '../lib/queuedDesign'
+import { displayRating } from '../lib/ratings'
+import { upsertMediaLog } from '../lib/mediaLog'
 
 async function searchMedia(path) {
   const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -32,7 +34,6 @@ export default function CollectionPage() {
   const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
   const [logMap, setLogMap] = useState({})
   const [ratingItem, setRatingItem] = useState(null)
-  const [actionItem, setActionItem] = useState(null)
   const [recommendItem, setRecommendItem] = useState(null)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -44,6 +45,18 @@ export default function CollectionPage() {
     MEDIA_ORDER.forEach(type => loadSection(type, 1, 'all'))
     fetchUserLog()
   }, [session])
+
+  useEffect(() => {
+    function refreshDiscover() {
+      setQuery('')
+      setSearchResults([])
+      setGenre('all')
+      loadSection(medium, 1, 'all')
+      fetchUserLog()
+    }
+    window.addEventListener('queued:refresh-discover', refreshDiscover)
+    return () => window.removeEventListener('queued:refresh-discover', refreshDiscover)
+  }, [medium])
 
   async function fetchUserLog() {
     const { data } = await supabase.from('user_media_log').select('*').eq('user_id', session.user.id)
@@ -77,7 +90,7 @@ export default function CollectionPage() {
     const providers = ['movie', 'tv'].includes(item.media_type)
       ? providersOverride ?? (await fetchProviders(item))
       : []
-    await supabase.from('user_media_log').upsert({
+    const { error } = await upsertMediaLog({
       user_id: session.user.id,
       media_type: item.media_type,
       media_id: item.media_id,
@@ -89,8 +102,8 @@ export default function CollectionPage() {
       review,
       source_type: 'self',
       streaming_providers: providers,
-    }, { onConflict: 'user_id,media_type,media_id' })
-    fetchUserLog()
+    })
+    if (!error) fetchUserLog()
   }
 
   async function openLogSheet(item) {
@@ -111,6 +124,17 @@ export default function CollectionPage() {
     setQuery('')
     setSearchResults([])
     loadSection(medium, 1, nextGenre)
+  }
+
+  function shuffleDiscover() {
+    if (query.length >= 2) {
+      setSearchResults(prev => [...prev].sort(() => Math.random() - 0.5))
+      return
+    }
+    setItems(prev => ({
+      ...prev,
+      [medium]: [...(prev[medium] ?? [])].sort(() => Math.random() - 0.5),
+    }))
   }
 
   function handleSearch(q) {
@@ -153,10 +177,16 @@ export default function CollectionPage() {
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#2DD48F]" />In your queue</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#D8A84A]" />Rated</span>
           </div>
-          <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium] || query.length >= 2}
-            className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">
-            {loading[medium] ? '...' : 'Load more'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={shuffleDiscover}
+              className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)]">
+              Shuffle
+            </button>
+            <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium] || query.length >= 2}
+              className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-3 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)] disabled:opacity-40">
+              {loading[medium] ? '...' : 'Load more'}
+            </button>
+          </div>
         </div>
 
         {(loading[medium] || searching) && activeItems.length === 0 ? (
@@ -167,7 +197,7 @@ export default function CollectionPage() {
           <>
             <div className="grid grid-cols-3 gap-3">
               {activeItems.map(item => (
-              <DiscoverCard key={mediaKey(item)} item={item} logEntry={logMap[mediaKey(item)]} onTap={() => setActionItem(item)} onQueue={() => handleQueue(item)} />
+                <DiscoverCard key={mediaKey(item)} item={item} logEntry={logMap[mediaKey(item)]} onTap={() => openLogSheet(item)} onQueue={() => handleQueue(item)} />
               ))}
             </div>
             {query.length < 2 && <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
@@ -200,62 +230,34 @@ export default function CollectionPage() {
         </section>
       </div>
 
-      {actionItem && (
-        <DiscoverActionSheet
-          item={actionItem}
-          logEntry={logMap[mediaKey(actionItem)]}
-          onClose={() => setActionItem(null)}
-          onLog={() => {
-            setActionItem(null)
-            openLogSheet(actionItem)
-          }}
+      {ratingItem && (
+        <RatingModal
+          item={ratingItem}
+          existingEntry={logMap[mediaKey(ratingItem)] ?? ratingItem}
+          onClose={() => setRatingItem(null)}
+          onSaved={() => { fetchUserLog(); setRatingItem(null) }}
           onRecommend={() => {
-            setRecommendItem(actionItem)
-            setActionItem(null)
+            setRecommendItem(ratingItem)
+            setRatingItem(null)
           }}
         />
       )}
-      {ratingItem && <RatingModal item={ratingItem} existingEntry={logMap[mediaKey(ratingItem)] ?? ratingItem} onClose={() => setRatingItem(null)} onSaved={() => { fetchUserLog(); setRatingItem(null) }} />}
       {recommendItem && <RecommendationSheet initialItem={recommendItem} onClose={() => setRecommendItem(null)} />}
     </div>
   )
 }
 
-function DiscoverActionSheet({ item, logEntry, onClose, onLog, onRecommend }) {
-  return (
-    <SheetShell onClose={onClose} title={item.media_title} size="peek">
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <PosterTile item={item} w={52} h={76} radius={12} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title}</p>
-            <p className="mt-1 truncate text-xs text-[rgba(214,240,224,0.5)]">{item.media_creator || item.media_type}{item.year ? ` · ${item.year}` : ''}</p>
-            {logEntry && <p className="mt-2 text-[11px] font-semibold text-[#D8A84A]">Already in your collection</p>}
-          </div>
-        </div>
-        {logEntry?.streaming_providers && (
-          <ProviderRows providers={logEntry.streaming_providers} title={item.media_title} creator={item.media_creator} mediaType={item.media_type} compact />
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={onRecommend} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">Recommend</button>
-          <button onClick={onLog} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold">Add to log</button>
-        </div>
-      </div>
-    </SheetShell>
-  )
-}
-
 function DiscoverCard({ item, logEntry, onTap, onQueue }) {
-  const queued = logEntry && !logEntry.rating
+  const queued = logEntry?.status === 'queued'
   return (
     <article className="min-w-0">
       <button onClick={onTap} className="btn-press w-full text-left">
         <PosterTile item={item} className="w-full" h={120} radius={12}>
           <button onClick={e => { e.stopPropagation(); onQueue() }}
-            className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${logEntry ? 'bg-[#2DD48F] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
+            className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${queued ? 'bg-[#2DD48F] text-[#052016]' : logEntry ? 'bg-[#D8A84A] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
             {logEntry ? '✓' : '+'}
           </button>
-          {logEntry?.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-[rgba(2,12,8,0.82)] px-2 py-1 text-[10.5px] font-semibold text-[#D8A84A] backdrop-blur">★ {logEntry.rating}</div>}
+          {logEntry?.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-[rgba(2,12,8,0.82)] px-2 py-1 text-[10.5px] font-semibold text-[#D8A84A] backdrop-blur">Rating {displayRating(logEntry.rating)}</div>}
           {queued && <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#2DD48F]" />}
         </PosterTile>
       </button>

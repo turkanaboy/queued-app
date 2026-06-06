@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
+import { displayRating } from '../lib/ratings'
+import { upsertMediaLog } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 import {
@@ -145,7 +147,7 @@ export default function ProfilePage() {
   async function updateRecommendationStatus(item, status) {
     await supabase.from('recommendations').update({ recipient_status: status }).eq('id', item.recommendation_id)
     if (status !== 'not_yet_viewed') {
-      await supabase.from('user_media_log').upsert({
+      await upsertMediaLog({
         user_id: session.user.id,
         media_type: item.media_type,
         media_id: item.media_id,
@@ -157,7 +159,7 @@ export default function ProfilePage() {
         source_type: 'recommendation',
         source_user_id: item.origin_user_id,
         streaming_providers: item.streaming_providers ?? [],
-      }, { onConflict: 'user_id,media_type,media_id' })
+      })
     }
     fetchRecommendationQueue()
     fetchMediaLog()
@@ -292,7 +294,7 @@ export default function ProfilePage() {
   const total = mediumItems.length
   const finished = statusCounts.finished || 0
   const mediumRatings = mediumItems.filter(item => item.status === 'finished' && item.rating).map(item => Number(item.rating))
-  const avg = mediumRatings.length ? (mediumRatings.reduce((a, b) => a + b, 0) / mediumRatings.length).toFixed(1) : stats?.avgRating
+  const avg = mediumRatings.length ? displayRating((mediumRatings.reduce((a, b) => a + b, 0) / mediumRatings.length).toFixed(1)) : (stats?.avgRating ? displayRating(stats.avgRating) : null)
   const fromFriends = mediumItems.filter(item => ['recommendation', 'bot'].includes(item.origin_type)).length
   const activeBotRecommendation = recommendationQueue.find(rec => rec.sender_id === BOT_USER_ID && ACTIVE_STATUSES.includes(rec.recipient_status))
 
@@ -446,7 +448,7 @@ export default function ProfilePage() {
               {activity.map(item => (
                 <div key={item.id} className="w-24 shrink-0">
                   <PosterTile item={item} w={96} h={138} radius={12}>
-                    {item.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-[#D8A84A]">★ {item.rating}</div>}
+                    {item.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-[#D8A84A]">★ {displayRating(item.rating)}</div>}
                   </PosterTile>
                   <p className="mt-1.5 truncate text-xs font-bold text-[#F7F1E4]/75">{item.media_title}</p>
                 </div>
@@ -555,13 +557,13 @@ function QueueRow({ item, own, first, onOpen, onStatus, onDelete }) {
     <div className={`flex items-center gap-3 px-[13px] py-[11px] ${first ? '' : 'border-t border-[rgba(150,214,180,0.12)]'}`}>
       <button onClick={onOpen} className="btn-press"><PosterTile item={item} w={34} h={52} radius={8} /></button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title} {item.rating && <span className="font-mono-q text-[11px] text-[#D8A84A]">★ {item.rating}</span>}</p>
+        <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title} {item.rating && <span className="font-mono-q text-[11px] text-[#D8A84A]">★ {displayRating(item.rating)}</span>}</p>
         <p className="truncate text-[11.5px] text-[rgba(214,240,224,0.5)]">
           {item.media_creator || MEDIA[item.media_type]?.label}
           <span> · {item.origin}</span>
           {item.origin_type === 'bot' && <span className="text-[#C96B4B]"> · Bot</span>}
         </p>
-        {own && item.item_kind === 'log' && <button onClick={onDelete} className="btn-press mt-1 text-[10.5px] font-semibold text-[rgba(214,240,224,0.35)]">Remove</button>}
+        {own && item.item_kind === 'log' && <button onClick={onDelete} className="btn-press mt-2 inline-flex rounded-full border border-[#C96B4B]/35 px-2.5 py-1 text-[11px] font-bold text-[#F7F1E4]/70">Remove</button>}
       </div>
       {own && item.item_kind !== 'sent' ? <StatusMenu value={item.status} onChange={onStatus} /> : <span className="font-mono-q text-[10px] text-[rgba(214,240,224,0.5)]">{STATUS[item.status]?.short}</span>}
     </div>

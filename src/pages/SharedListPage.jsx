@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { ProviderRows } from './AddRecommendationPage'
+import { upsertMediaLog } from '../lib/mediaLog'
 import { Chip, C, EmptyState, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, STATUS_ORDER, StatusMenu } from '../lib/queuedDesign'
 
 const STATUS_LABELS = { all: 'All', not_yet_viewed: 'New', queued: 'Queued', in_progress: 'Watching', finished: 'Finished', skipped: 'Skipped', bailed: 'Bailed' }
@@ -42,7 +43,7 @@ export default function SharedListPage() {
   async function syncRecommendationToLog(rec, status, rating = rec.rating ?? null) {
     if (!rec || rec.recipient_id !== session.user.id) return
     if (status === 'not_yet_viewed' || status === 'skipped') return
-    await supabase.from('user_media_log').upsert({
+    await upsertMediaLog({
       user_id: session.user.id,
       media_type: rec.media_type,
       media_id: rec.media_id,
@@ -53,7 +54,7 @@ export default function SharedListPage() {
       status,
       source_type: 'recommendation',
       source_user_id: rec.sender_id,
-    }, { onConflict: 'user_id,media_type,media_id' })
+    })
   }
 
   async function updateStatus(recId, status, rec) {
@@ -65,7 +66,7 @@ export default function SharedListPage() {
   async function updateRating(recId, rating, rec) {
     await supabase.from('recommendations').update({ rating }).eq('id', recId)
     if (rec && rating) {
-      await supabase.from('user_media_log').upsert({
+      await upsertMediaLog({
         user_id: session.user.id,
         media_type: rec.media_type,
         media_id: rec.media_id,
@@ -76,7 +77,7 @@ export default function SharedListPage() {
         status: 'finished',
         source_type: 'recommendation',
         source_user_id: rec.sender_id,
-      }, { onConflict: 'user_id,media_type,media_id' })
+      })
     }
     fetchRecs()
   }

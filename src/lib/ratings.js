@@ -7,5 +7,9 @@ export function stepToRating(step) {
 }
 
 export function ratingLabel(step) {
-  return String(stepToRating(step))
+  return String(step)
+}
+
+export function displayRating(rating) {
+  return rating == null ? null : String(Number(rating) * 2)
 }

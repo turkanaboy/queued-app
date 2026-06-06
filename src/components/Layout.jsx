@@ -7,6 +7,12 @@ export default function Layout() {
   const unreadCount = useUnreadCount()
   const [showRecommendSheet, setShowRecommendSheet] = useState(false)
 
+  function refreshDiscoverIfActive() {
+    if (window.location.pathname !== '/collection') return
+    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+    window.dispatchEvent(new Event('queued:refresh-discover'))
+  }
+
   return (
     <div className="min-h-dvh flex flex-col">
       <main className="flex-1 overflow-y-auto pb-28">
@@ -34,7 +40,7 @@ export default function Layout() {
             </svg>
           </button>
 
-          <TabItem to="/collection" label="Discover">
+          <TabItem to="/collection" label="Discover" onClick={refreshDiscoverIfActive}>
             <DiscoverIcon />
           </TabItem>
 
@@ -49,10 +55,11 @@ export default function Layout() {
   )
 }
 
-function TabItem({ to, label, badge, children }) {
+function TabItem({ to, label, badge, children, onClick }) {
   return (
     <NavLink
       to={to}
+      onClick={onClick}
       className={({ isActive }) =>
         `btn-press flex flex-col items-center gap-1 rounded-2xl px-0.5 py-0 transition-all ${
           isActive ? 'opacity-100 text-[#F4E9D1]' : 'opacity-75 text-[#F4E9D1]/75'

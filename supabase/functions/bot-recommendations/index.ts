@@ -103,27 +103,34 @@ function scoreCandidate(candidate: any, typePreference: string[], genres: string
 
 function recommendationNote(item: any, user: any, reason: string) {
   const score = item.vote_average ? `${item.vote_average.toFixed(1)} stars` : 'strong audience response'
-  const style = user?.watching_style ? ` Your intake says ${user.watching_style.replace('_', ' ')} is your usual mode.` : ''
   const genres = user?.favorite_genres?.length ? ` It is nudged toward ${user.favorite_genres.slice(0, 3).join(', ')}.` : ''
-  return `${reason} ${score} from ${(item.vote_count ?? 0).toLocaleString()} ratings.${genres}${style}`.slice(0, 500)
+  return `${reason} ${score} from ${(item.vote_count ?? 0).toLocaleString()} ratings.${genres}`.slice(0, 500)
 }
 
 async function upsertRecommendationLog(supabase: any, recommendation: any, userId: string) {
+  const row = {
+    user_id: userId,
+    media_type: recommendation.media_type,
+    media_id: recommendation.media_id,
+    media_title: recommendation.media_title,
+    media_creator: recommendation.media_creator ?? null,
+    media_poster_url: recommendation.media_poster_url,
+    status: recommendation.recipient_status,
+    source_type: 'recommendation',
+    source_user_id: recommendation.sender_id ?? BOT_USER_ID,
+    streaming_providers: recommendation.streaming_providers ?? [],
+    created_at: recommendation.created_at,
+  }
+
+  const result = await supabase
+    .from('user_media_log')
+    .upsert(row, { onConflict: 'user_id,media_type,media_id' })
+
+  if (!result.error) return result
+
   return await supabase
     .from('user_media_log')
-    .upsert({
-      user_id: userId,
-      media_type: recommendation.media_type,
-      media_id: recommendation.media_id,
-      media_title: recommendation.media_title,
-      media_creator: recommendation.media_creator ?? null,
-      media_poster_url: recommendation.media_poster_url,
-      status: recommendation.recipient_status,
-      source_type: 'recommendation',
-      source_user_id: recommendation.sender_id ?? BOT_USER_ID,
-      streaming_providers: recommendation.streaming_providers ?? [],
-      created_at: recommendation.created_at,
-    }, { onConflict: 'user_id,media_type,media_id' })
+    .upsert(row, { onConflict: 'user_id,media_id' })
 }
 
 serve(async (req) => {

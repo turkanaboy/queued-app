@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PosterTile, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, ratingToStep, stepToRating } from '../lib/ratings'
+import { upsertMediaLog } from '../lib/mediaLog'
 
 const TYPE_LABEL = { movie: 'Movie', tv: 'TV', book: 'Book', album: 'Album' }
 
-export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
+export default function RatingModal({ item, existingEntry, onClose, onSaved, onRecommend }) {
   const { session } = useAuth()
   const [ratingStep, setRatingStep] = useState(ratingToStep(existingEntry?.rating))
   const [comment, setComment] = useState(existingEntry?.review ?? '')
@@ -17,7 +17,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
   async function save() {
     setSaving(true)
     setError('')
-    const { error } = await supabase.from('user_media_log').upsert({
+    const { error } = await upsertMediaLog({
       user_id: session.user.id,
       media_type: item.media_type,
       media_id: item.media_id,
@@ -30,7 +30,7 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
       source_type: existingEntry?.source_type ?? 'self',
       source_user_id: existingEntry?.source_user_id ?? null,
       streaming_providers: existingEntry?.streaming_providers ?? item.streaming_providers ?? [],
-    }, { onConflict: 'user_id,media_type,media_id' })
+    })
     if (error) {
       setError(error.message)
       setSaving(false)
@@ -53,21 +53,14 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
 
         <div>
           <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Status</p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              ['in_progress', 'In progress'],
-              ['finished', 'Finished'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatus(value)}
-                className={`btn-press rounded-2xl border px-4 py-3 text-sm font-bold ${status === value ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] text-[rgba(214,240,224,0.7)]'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <select
+            value={status}
+            onChange={e => setStatus(e.target.value)}
+            className="w-full rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.82)] px-3.5 py-3 text-sm font-bold text-[#F7F1E4] outline-none focus:border-[#D8A84A]/80"
+          >
+            <option value="in_progress">In progress</option>
+            <option value="finished">Finished</option>
+          </select>
         </div>
 
         <div>
@@ -92,9 +85,10 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved }) {
         {error && <p className="text-sm text-rose-300">{error}</p>}
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={onClose} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">Cancel</button>
+          <button onClick={onRecommend || onClose} className="btn-press rounded-2xl border border-[rgba(150,214,180,0.16)] px-4 py-3 text-sm font-bold text-[rgba(214,240,224,0.7)]">{onRecommend ? 'Recommend' : 'Cancel'}</button>
           <button onClick={save} disabled={saving} className="btn-press btn-cream rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving...' : 'Add to log'}</button>
         </div>
+        {onRecommend && <button onClick={onClose} className="btn-press w-full text-center text-xs font-bold text-[rgba(214,240,224,0.45)]">Cancel</button>}
       </div>
     </SheetShell>
   )

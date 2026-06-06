@@ -26,6 +26,8 @@ const TMDB_GENRES: Record<string, number> = {
   Thriller: 53,
   'Animated series': 16,
   Docuseries: 99,
+  'Food & travel': 10764,
+  Reality: 10764,
 }
 
 const BOOK_SUBJECTS: Record<string, string> = {
@@ -125,6 +127,17 @@ function mapItunesRssEntry(e: any) {
     media_creator:    e['im:artist']?.label ?? null,
     media_poster_url: poster,
     year:             (e['im:releaseDate']?.attributes?.label ?? '').slice(0, 4),
+  }
+}
+
+function mapTmdbResult(r: any, mediaType: string) {
+  return {
+    media_id:         String(r.id),
+    media_type:       r.media_type === 'tv' || mediaType === 'tv' ? 'tv' : 'movie',
+    media_title:      r.title ?? r.name,
+    media_creator:    null,
+    media_poster_url: r.poster_path ? `${TMDB_IMAGE_W300}${r.poster_path}` : null,
+    year:             (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
   }
 }
 
@@ -237,16 +250,26 @@ serve(async (req) => {
     : `${TMDB_BASE}/search/${type}`
   const res  = await fetch(`${endpoint}?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`)
   const data = await res.json()
-  const results = (data.results ?? [])
+  const titleResults = (data.results ?? [])
     .filter((r: any) => r.media_type !== 'person' && (r.title || r.name))
     .slice(0, 10)
-    .map((r: any) => ({
-      media_id:         String(r.id),
-      media_type:       r.media_type === 'tv' || type === 'tv' ? 'tv' : 'movie',
-      media_title:      r.title ?? r.name,
-      media_creator:    null,
-      media_poster_url: r.poster_path ? `${TMDB_IMAGE_W300}${r.poster_path}` : null,
-      year:             (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
-    }))
+    .map((r: any) => mapTmdbResult(r, type))
+
+  let peopleResults: any[] = []
+  if (type === 'movie' || type === 'tv' || type === 'multi') {
+    const peopleRes = await fetch(`${TMDB_BASE}/search/person?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`)
+    const peopleData = await peopleRes.json()
+    const personIds = (peopleData.results ?? []).slice(0, 3).map((person: any) => person.id)
+    const creditResponses = await Promise.all(personIds.map((id: number) =>
+      fetch(`${TMDB_BASE}/person/${id}/combined_credits?api_key=${apiKey}&language=en-US`).then(res => res.json())
+    ))
+    peopleResults = creditResponses
+      .flatMap((credits: any) => [...(credits.cast ?? []), ...(credits.crew ?? [])])
+      .filter((r: any) => (type === 'multi' || r.media_type === type) && (r.media_type === 'movie' || r.media_type === 'tv') && (r.title || r.name) && r.poster_path)
+      .slice(0, 12)
+      .map((r: any) => mapTmdbResult(r, r.media_type))
+  }
+
+  const results = [...new Map([...titleResults, ...peopleResults].map((item: any) => [`${item.media_type}:${item.media_id}`, item])).values()].slice(0, 12)
   return json({ results })
 })

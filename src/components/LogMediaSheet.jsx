@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, stepToRating } from '../lib/ratings'
+import { upsertMediaLog } from '../lib/mediaLog'
 
 const TYPE_OPTIONS = ['multi', ...MEDIA_ORDER]
 const PLACEHOLDERS = {
@@ -70,7 +71,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
     if (!selected) return
     setSaving(true)
     setError('')
-    const { error } = await supabase.from('user_media_log').upsert({
+    const { error } = await upsertMediaLog({
       user_id: userId,
       media_type: selected.media_type,
       media_id: selected.media_id,
@@ -82,7 +83,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       review: status === 'finished' ? (review.trim() || null) : null,
       source_type: 'self',
       streaming_providers: providers ?? [],
-    }, { onConflict: 'user_id,media_type,media_id' })
+    })
     if (error) { setError(error.message); setSaving(false); return }
     onSaved?.()
     onClose()
