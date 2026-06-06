@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../lib/supabase'
 import { PosterTile, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, ratingToStep, stepToRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
@@ -11,8 +12,37 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved, onR
   const [ratingStep, setRatingStep] = useState(ratingToStep(existingEntry?.rating))
   const [comment, setComment] = useState(existingEntry?.review ?? '')
   const [status, setStatus] = useState(existingEntry?.status === 'in_progress' ? 'in_progress' : 'finished')
+  const [details, setDetails] = useState(item)
+  const [loadingDetails, setLoadingDetails] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchDetails() {
+      setDetails(item)
+      if (!item?.media_type || !item?.media_id) return
+      setLoadingDetails(true)
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=details&media_type=${item.media_type}&media_id=${encodeURIComponent(item.media_id)}`,
+          { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+        )
+        const json = await res.json()
+        if (!cancelled && json.details) {
+          setDetails(prev => Object.fromEntries(
+            Object.entries({ ...prev, ...json.details }).map(([key, value]) => [key, value ?? prev[key]])
+          ))
+        }
+      } catch {
+        // Keep the base item visible if provider details are unavailable.
+      }
+      if (!cancelled) setLoadingDetails(false)
+    }
+    fetchDetails()
+    return () => { cancelled = true }
+  }, [item])
 
   async function save() {
     setSaving(true)
@@ -21,9 +51,9 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved, onR
       user_id: session.user.id,
       media_type: item.media_type,
       media_id: item.media_id,
-      media_title: item.media_title,
-      media_creator: item.media_creator ?? null,
-      media_poster_url: item.media_poster_url,
+      media_title: details.media_title ?? item.media_title,
+      media_creator: details.media_creator ?? item.media_creator ?? null,
+      media_poster_url: details.media_poster_url ?? item.media_poster_url,
       rating: stepToRating(ratingStep),
       status,
       review: comment.trim() || null,
@@ -44,12 +74,21 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved, onR
     <SheetShell onClose={onClose} title="Add to log">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <PosterTile item={item} w={56} h={82} radius={14} />
+          <PosterTile item={details} w={56} h={82} radius={14} />
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-extrabold leading-tight text-[#F7F1E4]">{item.media_title}</p>
-            <p className="mt-1 truncate text-sm text-[rgba(214,240,224,0.6)]">{item.media_creator || TYPE_LABEL[item.media_type]}{item.year ? ` · ${item.year}` : ''}</p>
+            <p className="text-lg font-extrabold leading-tight text-[#F7F1E4]">{details.media_title ?? item.media_title}</p>
+            <p className="mt-1 truncate text-sm text-[rgba(214,240,224,0.6)]">{details.media_creator || item.media_creator || TYPE_LABEL[item.media_type]}{details.year || item.year ? ` · ${details.year || item.year}` : ''}</p>
           </div>
         </div>
+
+        {(details.description || details.actors?.length || loadingDetails) && (
+          <div className="space-y-2 rounded-[16px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.38)] px-3.5 py-3">
+            {details.description && <p className="line-clamp-5 text-[12.5px] leading-relaxed text-[rgba(214,240,224,0.72)]">{details.description}</p>}
+            {details.director && <p className="truncate text-[11.5px] font-semibold text-[rgba(214,240,224,0.55)]"><span className="text-[#D8A84A]">Director</span> {details.director}</p>}
+            {details.actors?.length > 0 && <p className="line-clamp-2 text-[11.5px] font-semibold text-[rgba(214,240,224,0.55)]"><span className="text-[#D8A84A]">Actors</span> {details.actors.join(', ')}</p>}
+            {loadingDetails && !details.description && <p className="text-[12px] font-semibold text-[rgba(214,240,224,0.45)]">Loading title details...</p>}
+          </div>
+        )}
 
         <div>
           <p className="font-mono-q mb-2 text-[10.5px] font-semibold uppercase tracking-[1.6px] text-[rgba(214,240,224,0.5)]">Status</p>

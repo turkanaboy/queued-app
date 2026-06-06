@@ -175,16 +175,21 @@ export default function ProfilePage() {
   async function requestBotRecommendation() {
     setBotLoading(true)
     setBotResult(null)
-    const token = (await supabase.auth.getSession()).data.session?.access_token
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ user_id: session.user.id, force_new: true }),
-    })
-    const json = await res.json()
-    setBotResult(json)
-    await Promise.all([fetchRecommendationQueue(), fetchSentRecommendations(), fetchMediaLog(), fetchStats()])
-    setBotLoading(false)
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ user_id: session.user.id, force_new: true }),
+      })
+      const json = await res.json()
+      setBotResult(res.ok ? json : { error: json.error || 'Queued Bot could not make a pick.' })
+      await Promise.all([fetchRecommendationQueue(), fetchSentRecommendations(), fetchMediaLog(), fetchStats()])
+    } catch (err) {
+      setBotResult({ error: err.message || 'Queued Bot could not make a pick.' })
+    } finally {
+      setBotLoading(false)
+    }
   }
 
   async function saveProfile() {
@@ -532,6 +537,18 @@ function BotStrip({ loading, active, result, onAsk, onDismiss, onStatusChange })
             <p className="mt-1 line-clamp-2 text-xs text-[rgba(214,240,224,0.7)]">{result.reason || rec.reason || 'Queued Bot added a fresh pick.'}</p>
           </div>
           <StatusMenu value="not_yet_viewed" onChange={onStatusChange} />
+        </div>
+      </div>
+    )
+  }
+  if (result?.exhausted || result?.error) {
+    return (
+      <div className="rounded-[18px] border border-[#C96B4B]/30 bg-[rgba(12,62,44,0.62)] p-3 shadow-[inset_2px_0_0_rgba(201,107,75,0.55)]">
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 text-[13px] font-semibold text-[rgba(214,240,224,0.72)]">
+            {result.error || 'Queued Bot could not find a fresh pick yet. Try changing genres or ask again after adding a few more titles.'}
+          </p>
+          <button onClick={onAsk} className="btn-press shrink-0 rounded-full border border-[#D8A84A]/35 px-3 py-1.5 text-xs font-bold text-[#D8A84A]">Try again</button>
         </div>
       </div>
     )

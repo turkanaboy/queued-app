@@ -94,6 +94,7 @@ function mapBook(doc: any) {
     media_creator:    doc.author_name?.[0] ?? null,
     media_poster_url: doc.cover_i ? `${OL_COVER}/${doc.cover_i}-M.jpg` : null,
     year:             String(doc.first_publish_year ?? ''),
+    description:      null,
   }
 }
 
@@ -105,6 +106,7 @@ function mapSubjectBook(work: any) {
     media_creator:    work.authors?.[0]?.name ?? null,
     media_poster_url: work.cover_id ? `${OL_COVER}/${work.cover_id}-M.jpg` : null,
     year:             String(work.first_publish_year ?? ''),
+    description:      null,
   }
 }
 
@@ -118,6 +120,8 @@ function mapItunesAlbum(r: any) {
     media_creator:    r.artistName ?? null,
     media_poster_url: artwork || null,
     year:             (r.releaseDate ?? '').slice(0, 4),
+    description:      r.primaryGenreName ? `${r.primaryGenreName} album${r.trackCount ? ` with ${r.trackCount} tracks` : ''}.` : null,
+    genre:            r.primaryGenreName ?? null,
   }
 }
 
@@ -131,6 +135,8 @@ function mapItunesRssEntry(e: any) {
     media_creator:    e['im:artist']?.label ?? null,
     media_poster_url: poster,
     year:             (e['im:releaseDate']?.attributes?.label ?? '').slice(0, 4),
+    description:      e.category?.attributes?.label ? `${e.category.attributes.label} album.` : null,
+    genre:            e.category?.attributes?.label ?? null,
   }
 }
 
@@ -142,6 +148,32 @@ function mapTmdbResult(r: any, mediaType: string) {
     media_creator:    null,
     media_poster_url: r.poster_path ? `${TMDB_IMAGE_W300}${r.poster_path}` : null,
     year:             (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
+    description:      r.overview ?? null,
+  }
+}
+
+function descriptionText(value: any) {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  return value.value ?? null
+}
+
+function mapTmdbDetails(details: any, credits: any, mediaType: string) {
+  const cast = (credits.cast ?? []).slice(0, 6).map((person: any) => person.name).filter(Boolean)
+  const director = mediaType === 'movie'
+    ? (credits.crew ?? []).find((person: any) => person.job === 'Director')?.name ?? null
+    : null
+
+  return {
+    media_id:         String(details.id),
+    media_type:       mediaType,
+    media_title:      details.title ?? details.name,
+    media_creator:    director,
+    media_poster_url: details.poster_path ? `${TMDB_IMAGE_W300}${details.poster_path}` : null,
+    year:             (details.release_date ?? details.first_air_date ?? '').slice(0, 4),
+    description:      details.overview ?? null,
+    director,
+    actors:           cast,
   }
 }
 
@@ -214,6 +246,7 @@ serve(async (req) => {
         media_creator:    null,
         media_poster_url: `${TMDB_IMAGE_W300}${r.poster_path}`,
         year:             (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
+        description:      r.overview ?? null,
         vote_average:     r.vote_average,
       }))
     return json({ results, total_pages: data.total_pages ?? 1 })
@@ -240,6 +273,56 @@ serve(async (req) => {
   }
 
   // ── Search — all four types ───────────────────────────────────
+  if (action === 'details') {
+    const mediaType = searchParams.get('media_type')
+    const mediaId   = searchParams.get('media_id')
+    if (!mediaType || !mediaId) return json({ error: 'media_type and media_id are required' }, 400)
+
+    if (mediaType === 'movie' || mediaType === 'tv') {
+      const [detailsRes, creditsRes] = await Promise.all([
+        fetch(`${TMDB_BASE}/${mediaType}/${mediaId}?api_key=${apiKey}&language=en-US`),
+        fetch(`${TMDB_BASE}/${mediaType}/${mediaId}/credits?api_key=${apiKey}&language=en-US`),
+      ])
+      const [details, credits] = await Promise.all([detailsRes.json(), creditsRes.json()])
+      return json({ details: mapTmdbDetails(details, credits, mediaType) })
+    }
+
+    if (mediaType === 'book') {
+      const res = await fetch(`${OL_BASE}/works/${mediaId}.json`)
+      const work = await res.json()
+      return json({
+        details: {
+          media_id:         mediaId,
+          media_type:       'book',
+          media_title:      work.title ?? null,
+          media_creator:    null,
+          media_poster_url: work.covers?.[0] ? `${OL_COVER}/${work.covers[0]}-M.jpg` : null,
+          year:             String(work.first_publish_date ?? '').slice(0, 4),
+          description:      descriptionText(work.description),
+        }
+      })
+    }
+
+    if (mediaType === 'album') {
+      const res = await fetch(`${ITUNES_BASE}/lookup?id=${encodeURIComponent(mediaId)}&entity=album&country=US`)
+      const data = await res.json()
+      const album = (data.results ?? []).find((item: any) => item.collectionId || item.trackId) ?? data.results?.[0]
+      return json({
+        details: album ? mapItunesAlbum(album) : {
+          media_id: mediaId,
+          media_type: 'album',
+          media_title: null,
+          media_creator: null,
+          media_poster_url: null,
+          year: '',
+          description: null,
+        }
+      })
+    }
+
+    return json({ error: 'unsupported media_type' }, 400)
+  }
+
   const query = searchParams.get('query')
   const type  = searchParams.get('type') ?? 'multi'
 

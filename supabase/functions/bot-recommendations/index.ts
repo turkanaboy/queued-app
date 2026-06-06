@@ -29,6 +29,8 @@ const GENRE_IDS: Record<string, number> = {
   Superhero: 28,
   'Animated series': 16,
   Docuseries: 99,
+  'Food & travel': 10764,
+  Reality: 10764,
 }
 
 const BOOK_SUBJECTS: Record<string, string> = {
@@ -74,13 +76,29 @@ function json(data: unknown, status = 200) {
   })
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function normalizedEntries<T>(map: Record<string, T>) {
+  return Object.fromEntries(Object.entries(map).map(([key, value]) => [normalizeText(key), value]))
+}
+
+const NORMALIZED_GENRE_IDS = normalizedEntries(GENRE_IDS)
+const NORMALIZED_BOOK_SUBJECTS = normalizedEntries(BOOK_SUBJECTS)
+const NORMALIZED_ALBUM_GENRES = normalizedEntries(ALBUM_GENRES)
+
+function pickNormalized<T>(map: Record<string, T>, key: string) {
+  return map[normalizeText(key)] ?? null
+}
+
 function pickGenreFilter(genres: string[] | null | undefined) {
-  const ids = (genres ?? []).map(g => GENRE_IDS[g]).filter(Boolean)
+  const ids = (genres ?? []).map(g => pickNormalized(NORMALIZED_GENRE_IDS, g)).filter(Boolean)
   return ids.length ? `&with_genres=${ids.slice(0, 3).join('|')}` : ''
 }
 
 function pickMappedTerm(genres: string[] | null | undefined, map: Record<string, string>, fallback: string) {
-  return (genres ?? []).map(g => map[g]).find(Boolean) ?? fallback
+  return (genres ?? []).map(g => pickNormalized(map, g)).find(Boolean) ?? fallback
 }
 
 function preferredMediaTypes(log: any[] = []) {
@@ -172,7 +190,7 @@ serve(async (req) => {
   const [{ data: previousRecs }, { data: previousLog }] = await Promise.all([
     supabase
       .from('recommendations')
-      .select('media_id')
+      .select('media_id, media_type')
       .eq('recipient_id', user_id)
       .eq('sender_id', BOT_USER_ID)
       .is('deleted_at', null),
@@ -183,8 +201,8 @@ serve(async (req) => {
   ])
 
   const seen = new Set([
-    ...(previousRecs ?? []).map((r: any) => r.media_id),
-    ...(previousLog ?? []).map((r: any) => r.media_id),
+    ...(previousRecs ?? []).map((r: any) => `${r.media_type}:${r.media_id}`),
+    ...(previousLog ?? []).map((r: any) => `${r.media_type}:${r.media_id}`),
   ])
 
   await supabase.from('friendships').upsert({
@@ -200,8 +218,8 @@ serve(async (req) => {
   const genreFilter = pickGenreFilter(user?.favorite_genres)
   const genreList = user?.favorite_genres ?? []
   const typePreference = preferredMediaTypes(previousLog ?? [])
-  const bookSubject = pickMappedTerm(genreList, BOOK_SUBJECTS, 'fiction')
-  const albumTerm = pickMappedTerm(genreList, ALBUM_GENRES, 'new music')
+  const bookSubject = pickMappedTerm(genreList, NORMALIZED_BOOK_SUBJECTS, 'fiction')
+  const albumTerm = pickMappedTerm(genreList, NORMALIZED_ALBUM_GENRES, 'new music')
 
   const urls = [
     {
@@ -223,6 +241,26 @@ serve(async (req) => {
       type: 'album',
       reason: `Queued Bot picked this album from your ${albumTerm} taste signal.`,
       url: `${ITUNES_BASE}/search?term=${encodeURIComponent(albumTerm)}&entity=album&media=music&limit=20&country=US`,
+    },
+    {
+      type: 'movie',
+      reason: 'Queued Bot broadened the search after your platform filters were too tight.',
+      url: `${TMDB_BASE}/discover/movie?api_key=${apiKey}&sort_by=vote_average.desc&vote_count.gte=50&include_adult=false&language=en-US${genreFilter}`,
+    },
+    {
+      type: 'tv',
+      reason: 'Queued Bot broadened the search after your platform filters were too tight.',
+      url: `${TMDB_BASE}/discover/tv?api_key=${apiKey}&sort_by=vote_average.desc&vote_count.gte=40&include_adult=false&language=en-US${genreFilter}`,
+    },
+    {
+      type: 'book',
+      reason: 'Queued Bot broadened the book search to popular weekly titles.',
+      url: `${OL_BASE}/trending/weekly.json?limit=30`,
+    },
+    {
+      type: 'album',
+      reason: 'Queued Bot broadened the music search to current popular albums.',
+      url: `${ITUNES_BASE}/search?term=popular%20music&entity=album&media=music&limit=30&country=US`,
     },
   ]
 
@@ -278,7 +316,7 @@ serve(async (req) => {
 
   for (const candidate of candidates) {
     const mediaId = candidate.media_id
-    if (seen.has(mediaId)) continue
+    if (seen.has(`${candidate.type}:${mediaId}`)) continue
 
     const rec = {
       sender_id: BOT_USER_ID,
