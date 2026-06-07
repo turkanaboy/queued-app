@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!
 const OTDB_BASE = 'https://opentdb.com/api.php'
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages'
-const CLAUDE_MODEL = 'claude-sonnet-4-5'
+const CLAUDE_MODEL = 'claude-haiku-4-5'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

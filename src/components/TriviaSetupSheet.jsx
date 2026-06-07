@@ -49,7 +49,7 @@ export default function TriviaSetupSheet({ onClose }) {
       const list = (data ?? []).map(f => ({
         ...f,
         friend: f.user_a_id === uid ? f.user_b : f.user_a,
-      })).filter(f => f.friend?.username || f.friend?.display_name)
+      })).filter(f => (f.friend?.username || f.friend?.display_name) && f.friend?.id !== '00000000-0000-0000-0000-000000000001')
       setFriends(list)
       setLoadingFriends(false)
     }
