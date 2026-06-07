@@ -76,6 +76,23 @@ export const TASTE_GENRE_GROUPS = [
       'Soul',
     ],
   },
+  {
+    key: 'game',
+    label: 'Games',
+    genres: [
+      'Adventure',
+      'Arcade',
+      'Fighting',
+      'Indie',
+      'Platform',
+      'Puzzle',
+      'RPG',
+      'Shooter',
+      'Simulator',
+      'Sport',
+      'Strategy',
+    ],
+  },
 ]
 
 export const TASTE_GENRES = TASTE_GENRE_GROUPS.flatMap(group => group.genres)

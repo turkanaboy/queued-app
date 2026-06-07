@@ -49,3 +49,14 @@ export function getAlbumLinks(title, creator) {
     appleMusic: `https://music.apple.com/search?term=${q}`,
   }
 }
+
+// Games
+export function getGameLinks(title) {
+  const q = encodeURIComponent(title)
+
+  return {
+    steam: `https://store.steampowered.com/search/?term=${q}`,
+    xbox: `https://www.xbox.com/search?q=${q}`,
+    playstation: `https://store.playstation.com/search/${q}`,
+  }
+}

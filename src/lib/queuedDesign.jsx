@@ -32,9 +32,10 @@ export const MEDIA = {
   tv: { key: 'tv', label: 'TV', singular: 'tv', cover: ['#2a3b2f', '#16241b'] },
   book: { key: 'book', label: 'Books', singular: 'books', cover: ['#3a2a1c', '#211610'] },
   album: { key: 'album', label: 'Albums', singular: 'albums', cover: ['#3a2330', '#1e131b'] },
+  game: { key: 'game', label: 'Games', singular: 'games', cover: ['#21344a', '#101b2c'] },
 }
 
-export const MEDIA_ORDER = ['movie', 'tv', 'book', 'album']
+export const MEDIA_ORDER = ['movie', 'tv', 'book', 'album', 'game']
 
 export const STATUS = {
   not_yet_viewed: { label: 'New', short: 'New', dot: '#D8A84A' },
@@ -59,6 +60,7 @@ export function MediaGlyph({ type, size = 15, color = C.cream }) {
   if (type === 'movie') return <svg viewBox="0 0 16 16" style={common} fill="none"><rect x="1.5" y="3" width="13" height="10" rx="1.6" stroke={color} strokeWidth="1.4"/><path d="M7 6.2l3 1.8-3 1.8z" fill={color}/></svg>
   if (type === 'tv') return <svg viewBox="0 0 16 16" style={common} fill="none"><rect x="1.5" y="3.5" width="13" height="8.5" rx="1.6" stroke={color} strokeWidth="1.4"/><path d="M6 13.5h4" stroke={color} strokeWidth="1.4" strokeLinecap="round"/></svg>
   if (type === 'book') return <svg viewBox="0 0 16 16" style={common} fill="none"><rect x="3" y="2" width="10" height="12" rx="1.2" stroke={color} strokeWidth="1.4"/><path d="M5.6 2v12" stroke={color} strokeWidth="1.3"/></svg>
+  if (type === 'game') return <svg viewBox="0 0 16 16" style={common} fill="none"><rect x="2" y="5" width="12" height="7" rx="3" stroke={color} strokeWidth="1.4"/><path d="M5 8.5h3M6.5 7v3" stroke={color} strokeWidth="1.2" strokeLinecap="round"/><circle cx="10.8" cy="8" r=".7" fill={color}/><circle cx="12.2" cy="9.4" r=".7" fill={color}/></svg>
   return <svg viewBox="0 0 16 16" style={common} fill="none"><circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.4"/><circle cx="8" cy="8" r="1.5" fill={color}/></svg>
 }
 

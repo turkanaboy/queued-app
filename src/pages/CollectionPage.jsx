@@ -25,9 +25,9 @@ function mediaKey(item) {
 export default function CollectionPage() {
   const { session } = useAuth()
   const [medium, setMedium] = useState('movie')
-  const [items, setItems] = useState({ movie: [], tv: [], book: [], album: [] })
-  const [pages, setPages] = useState({ movie: 1, tv: 1, book: 1, album: 1 })
-  const [loading, setLoading] = useState({ movie: true, tv: true, book: true, album: true })
+  const [items, setItems] = useState(() => Object.fromEntries(MEDIA_ORDER.map(type => [type, []])))
+  const [pages, setPages] = useState(() => Object.fromEntries(MEDIA_ORDER.map(type => [type, 1])))
+  const [loading, setLoading] = useState(() => Object.fromEntries(MEDIA_ORDER.map(type => [type, true])))
   const [logMap, setLogMap] = useState({})
   const [ratingItem, setRatingItem] = useState(null)
   const [recommendItem, setRecommendItem] = useState(null)
@@ -171,7 +171,7 @@ export default function CollectionPage() {
       <MediumTabs value={medium} onChange={changeMedium} showCounts={false} />
 
       <div className="space-y-5 px-[18px] pt-4">
-        <SearchField value={query} onChange={handleSearch} placeholder={`Search ${medium === 'tv' ? 'TV' : medium === 'album' ? 'albums' : `${medium}s`}...`} />
+        <SearchField value={query} onChange={handleSearch} placeholder={`Search ${medium === 'tv' ? 'TV' : medium === 'album' ? 'albums' : medium === 'game' ? 'games' : `${medium}s`}...`} />
         <div className="scrollbar-none flex gap-2 overflow-x-auto">
           <Chip active={genre === 'all'} onClick={() => changeGenre('all')}>All genres</Chip>
           {genreOptions.map(option => (

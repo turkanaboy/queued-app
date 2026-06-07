@@ -29,7 +29,7 @@ export default function TriviaSetupSheet({ onClose }) {
   const navigate = useNavigate()
 
   const [mode, setMode] = useState('balanced')
-  const [mediaTypes, setMediaTypes] = useState(['movie', 'tv', 'book', 'album'])
+  const [mediaTypes, setMediaTypes] = useState(MEDIA_ORDER)
   const [friends, setFriends] = useState([])
   const [selectedFriend, setSelectedFriend] = useState(null)
   const [loadingFriends, setLoadingFriends] = useState(true)
@@ -72,7 +72,7 @@ export default function TriviaSetupSheet({ onClose }) {
     setError('')
     setGenerating(true)
     try {
-      const types = mode === 'random' ? ['movie', 'tv', 'book', 'album'] : mediaTypes
+      const types = mode === 'random' ? MEDIA_ORDER : mediaTypes
       const result = await generateChallenge(uid, selectedFriend.friend.id, mode, types)
       onClose()
       navigate(`/trivia/${result.challenge_id}`)

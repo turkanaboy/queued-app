@@ -1,6 +1,6 @@
 # Queued
 
-Queued is a shared multimedia recommendation app for movies, TV, books, and albums.
+Queued is a shared multimedia recommendation app for movies, TV, books, albums, and video games.
 
 ## Product Vision
 
@@ -19,7 +19,7 @@ The personal queue can be filtered by:
 
 - Origin: all, mine, recommendations
 - Status: new, queued, in progress, skipped, bailed, finished
-- Media type: movies, TV, books, albums
+- Media type: movies, TV, books, albums, games
 
 ## Queued Bot
 

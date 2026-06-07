@@ -88,7 +88,7 @@ async function generateMCQQuestions(pool: MediaItem[], excludedTitles: string[])
 
 Rules:
 - Each question must be clearly about the specified media item
-- For regular items (is_random_fill: false): ask questions answerable by someone who has seen/read/heard the work (plot, characters, cast, director/author, themes)
+- For regular items (is_random_fill: false): ask questions answerable by someone who has seen/read/heard/played the work (plot, characters, cast, director/author/developer, themes, mechanics)
 - For random fill items (is_random_fill: true): generate a question about a well-known, culturally popular title of that media type — pick your own well-known title, do NOT use any of these excluded titles: ${excludedTitles.join(', ')}
 - Provide exactly 4 options (A, B, C, D) with exactly 1 correct answer
 - Wrong answers must be plausible (same genre/era, sounds like it could be right)
@@ -97,7 +97,7 @@ Rules:
 - Each object: { "type": "multiple_choice", "question": "...", "options": ["A","B","C","D"], "correct_index": 0, "media_title": "...", "media_type": "..." }
 - correct_index is 0-based (0 = A, 1 = B, 2 = C, 3 = D)
 - media_title should match the actual title (your chosen title for random fills)
-- media_type should be one of: movie, tv, book, album`
+- media_type should be one of: movie, tv, book, album, game`
 
   const userMessage = `Generate one trivia question for each of these ${pool.length} media items:\n${poolJson}`
 
@@ -144,7 +144,7 @@ interface FillInBlankQuestion {
 async function generateBonusQuestion(excludedTitles: string[]): Promise<FillInBlankQuestion> {
   const systemPrompt = `You are generating a bonus fill-in-the-blank trivia question for a media trivia game.
 
-Pick a culturally well-known media title (movie, TV show, book, or album) that is NOT in this list: ${excludedTitles.join(', ')}
+Pick a culturally well-known media title (movie, TV show, book, album, or video game) that is NOT in this list: ${excludedTitles.join(', ')}
 
 The question should:
 - Be a fill-in-the-blank sentence where the blank is the title of the work
@@ -369,7 +369,7 @@ serve(async (req) => {
       questions = [...mcqQuestions, bonusQuestion]
     } else {
       // Fetch logs
-      const mediaTypeFilter = media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album']
+      const mediaTypeFilter = media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game']
 
       const { data: initiatorLog } = await supabase
         .from('user_media_log')
@@ -422,7 +422,7 @@ serve(async (req) => {
         initiator_id,
         challenger_id,
         mode,
-        media_types: media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album'],
+        media_types: media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game'],
         status: 'pending_initiator',
         questions,
       })

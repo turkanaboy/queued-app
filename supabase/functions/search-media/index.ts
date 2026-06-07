@@ -6,6 +6,8 @@ const TMDB_LOGO_ORIG   = 'https://image.tmdb.org/t/p/original'
 const OL_BASE          = 'https://openlibrary.org'
 const OL_COVER         = 'https://covers.openlibrary.org/b/id'
 const ITUNES_BASE      = 'https://itunes.apple.com'
+const IGDB_BASE        = 'https://api.igdb.com/v4'
+const IGDB_COVER       = 'https://images.igdb.com/igdb/image/upload/t_cover_big'
 
 const TMDB_GENRES: Record<string, number> = {
   Action: 28,
@@ -61,9 +63,24 @@ const ALBUM_TERMS: Record<string, string> = {
   Soul: 'soul',
 }
 
+const IGDB_GENRES: Record<string, number> = {
+  Adventure: 31,
+  Arcade: 33,
+  Fighting: 4,
+  Indie: 32,
+  Platform: 8,
+  Puzzle: 9,
+  RPG: 12,
+  Shooter: 5,
+  Simulator: 13,
+  Sport: 14,
+  Strategy: 15,
+}
+
 const NORMALIZED_TMDB_GENRES = Object.fromEntries(Object.entries(TMDB_GENRES).map(([key, value]) => [normalizeText(key), value]))
 const NORMALIZED_BOOK_SUBJECTS = Object.fromEntries(Object.entries(BOOK_SUBJECTS).map(([key, value]) => [normalizeText(key), value]))
 const NORMALIZED_ALBUM_TERMS = Object.fromEntries(Object.entries(ALBUM_TERMS).map(([key, value]) => [normalizeText(key), value]))
+const NORMALIZED_IGDB_GENRES = Object.fromEntries(Object.entries(IGDB_GENRES).map(([key, value]) => [normalizeText(key), value]))
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -140,6 +157,31 @@ function mapItunesRssEntry(e: any) {
   }
 }
 
+function gameYear(timestamp: number | null | undefined) {
+  if (!timestamp) return ''
+  return String(new Date(timestamp * 1000).getUTCFullYear())
+}
+
+function gameCreator(game: any) {
+  const developer = (game.involved_companies ?? []).find((entry: any) => entry.developer)
+  return developer?.company?.name ?? game.involved_companies?.[0]?.company?.name ?? null
+}
+
+function mapIgdbGame(game: any) {
+  return {
+    media_id:         String(game.id),
+    media_type:       'game',
+    media_title:      game.name ?? 'Unknown Game',
+    media_creator:    gameCreator(game),
+    media_poster_url: game.cover?.image_id ? `${IGDB_COVER}/${game.cover.image_id}.jpg` : null,
+    year:             gameYear(game.first_release_date),
+    description:      game.summary ?? null,
+    genre:            game.genres?.map((g: any) => g.name).filter(Boolean).join(', ') ?? null,
+    total_rating:     game.total_rating ?? null,
+    total_rating_count: game.total_rating_count ?? null,
+  }
+}
+
 function mapTmdbResult(r: any, mediaType: string) {
   return {
     media_id:         String(r.id),
@@ -190,6 +232,27 @@ function uniqueMediaResults(results: any[], limit = 12) {
   return [...new Map(results.map((item: any) => [`${item.media_type}:${item.media_id}`, item])).values()].slice(0, limit)
 }
 
+async function igdb(endpoint: string, body: string) {
+  const clientId = Deno.env.get('IGDB_CLIENT_ID')
+  const token = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_ACCESS_TOKEN')
+  if (!clientId || !token) throw new Error('IGDB_CLIENT_ID and IGDB_API_KEY are required for game search.')
+
+  const res = await fetch(`${IGDB_BASE}/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Client-ID': clientId,
+      'Authorization': `Bearer ${token}`,
+    },
+    body,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`IGDB ${endpoint} error ${res.status}: ${text}`)
+  }
+  return await res.json()
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -228,6 +291,19 @@ serve(async (req) => {
       const data = await res.json()
       const results = (data.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
       return json({ results, total_pages: 5 })
+    }
+
+    if (mediaType === 'game') {
+      const genreId = normalizedLookup(NORMALIZED_IGDB_GENRES, genre)
+      const genreWhere = genreId ? ` & genres = (${genreId})` : ''
+      const games = await igdb('games', [
+        'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
+        `where cover != null & total_rating_count > 10${genreWhere};`,
+        'sort total_rating_count desc;',
+        'limit 24;',
+        `offset ${offset};`,
+      ].join(' '))
+      return json({ results: games.map(mapIgdbGame), total_pages: 5 })
     }
 
     // Movies / TV — TMDB weekly trending
@@ -272,7 +348,7 @@ serve(async (req) => {
     })
   }
 
-  // ── Search — all four types ───────────────────────────────────
+  // ── Details / search — supported media types ──────────────────
   if (action === 'details') {
     const mediaType = searchParams.get('media_type')
     const mediaId   = searchParams.get('media_id')
@@ -311,6 +387,25 @@ serve(async (req) => {
         details: album ? mapItunesAlbum(album) : {
           media_id: mediaId,
           media_type: 'album',
+          media_title: null,
+          media_creator: null,
+          media_poster_url: null,
+          year: '',
+          description: null,
+        }
+      })
+    }
+
+    if (mediaType === 'game') {
+      const games = await igdb('games', [
+        'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
+        `where id = ${Number(mediaId)};`,
+        'limit 1;',
+      ].join(' '))
+      return json({
+        details: games[0] ? mapIgdbGame(games[0]) : {
+          media_id: mediaId,
+          media_type: 'game',
           media_title: null,
           media_creator: null,
           media_poster_url: null,
@@ -363,6 +458,17 @@ serve(async (req) => {
     const artistAlbums = (artistAlbumData.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
     const titleAlbums = (titleData.results ?? []).filter((r: any) => r.artworkUrl100).map(mapItunesAlbum)
     return json({ results: uniqueMediaResults([...artistLookupAlbums, ...artistAlbums, ...titleAlbums], 12) })
+  }
+
+  if (type === 'game') {
+    const escapedQuery = query.replaceAll('"', '\\"')
+    const games = await igdb('games', [
+      `search "${escapedQuery}";`,
+      'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
+      'where cover != null;',
+      'limit 12;',
+    ].join(' '))
+    return json({ results: uniqueMediaResults(games.map(mapIgdbGame), 12) })
   }
 
   // Movies / TV via TMDB

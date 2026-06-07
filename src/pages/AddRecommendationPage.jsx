@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
-import { getProviderLink, getBookLinks, getAlbumLinks } from '../lib/affiliates'
+import { getProviderLink, getBookLinks, getAlbumLinks, getGameLinks } from '../lib/affiliates'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, SearchField, SheetShell } from '../lib/queuedDesign'
 
 async function mediaCall(path) {
@@ -95,7 +95,7 @@ function RecommendationComposer({ compact = false, onDone, initialItem = null })
   async function selectTitle(item) {
     setSelected(item)
     setResults([])
-    if (item.media_type === 'book' || item.media_type === 'album') {
+    if (!['movie', 'tv'].includes(item.media_type)) {
       setProviders(null)
       return
     }
@@ -221,6 +221,10 @@ export function ProviderRows({ providers, title, creator, mediaType, compact = f
   if (mediaType === 'album') {
     const links = getAlbumLinks(title, creator)
     return <ProviderLinkGroup label="Listen" links={[['Spotify', links.spotify], ['Apple Music', links.appleMusic]]} compact={compact} />
+  }
+  if (mediaType === 'game') {
+    const links = getGameLinks(title)
+    return <ProviderLinkGroup label="Play" links={[['Steam', links.steam], ['Xbox', links.xbox], ['PlayStation', links.playstation]]} compact={compact} />
   }
   if (!providers) return null
   if (Array.isArray(providers)) {

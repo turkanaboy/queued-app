@@ -7,6 +7,8 @@ const IMG_BASE = 'https://image.tmdb.org/t/p/w300'
 const OL_BASE = 'https://openlibrary.org'
 const OL_COVER = 'https://covers.openlibrary.org/b/id'
 const ITUNES_BASE = 'https://itunes.apple.com'
+const IGDB_BASE = 'https://api.igdb.com/v4'
+const IGDB_COVER = 'https://images.igdb.com/igdb/image/upload/t_cover_big'
 const DEFAULT_PLATFORMS = [8, 9, 15, 337, 384] // Netflix, Prime, Hulu, Disney+, Max
 const ACTIVE_STATUSES = ['not_yet_viewed', 'queued', 'in_progress']
 
@@ -119,6 +121,33 @@ const FALLBACK_CANDIDATES = [
     genre: 'Soul Pop',
     score: 4.7,
   },
+  {
+    type: 'game',
+    media_id: 'queued-fallback-game-hades',
+    media_title: 'Hades',
+    media_creator: 'Supergiant Games',
+    media_poster_url: null,
+    genre: 'RPG Action Indie',
+    score: 4.7,
+  },
+  {
+    type: 'game',
+    media_id: 'queued-fallback-game-celeste',
+    media_title: 'Celeste',
+    media_creator: 'Maddy Makes Games',
+    media_poster_url: null,
+    genre: 'Platform Indie',
+    score: 4.6,
+  },
+  {
+    type: 'game',
+    media_id: 'queued-fallback-game-portal-2',
+    media_title: 'Portal 2',
+    media_creator: 'Valve',
+    media_poster_url: null,
+    genre: 'Puzzle Adventure',
+    score: 4.7,
+  },
 ]
 
 const GENRE_IDS: Record<string, number> = {
@@ -175,6 +204,20 @@ const ALBUM_GENRES: Record<string, string> = {
   Soul: 'soul',
 }
 
+const GAME_GENRES: Record<string, number> = {
+  Adventure: 31,
+  Arcade: 33,
+  Fighting: 4,
+  Indie: 32,
+  Platform: 8,
+  Puzzle: 9,
+  RPG: 12,
+  Shooter: 5,
+  Simulator: 13,
+  Sport: 14,
+  Strategy: 15,
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -201,6 +244,7 @@ function normalizedEntries<T>(map: Record<string, T>) {
 const NORMALIZED_GENRE_IDS = normalizedEntries(GENRE_IDS)
 const NORMALIZED_BOOK_SUBJECTS = normalizedEntries(BOOK_SUBJECTS)
 const NORMALIZED_ALBUM_GENRES = normalizedEntries(ALBUM_GENRES)
+const NORMALIZED_GAME_GENRES = normalizedEntries(GAME_GENRES)
 
 function pickNormalized<T>(map: Record<string, T>, key: string) {
   return map[normalizeText(key)] ?? null
@@ -216,7 +260,7 @@ function pickMappedTerm(genres: string[] | null | undefined, map: Record<string,
 }
 
 function preferredMediaTypes(log: any[] = []) {
-  const scores: Record<string, number> = { movie: 0, tv: 0, book: 0, album: 0 }
+  const scores: Record<string, number> = { movie: 0, tv: 0, book: 0, album: 0, game: 0 }
   for (const item of log) {
     const rating = Number(item.rating ?? 0)
     if (scores[item.media_type] == null) continue
@@ -241,12 +285,21 @@ function recommendationNote(item: any, user: any, reason: string) {
 
 async function fetchJson(item: any) {
   try {
-    const res = await fetch(item.url)
+    const res = await fetch(item.url, {
+      method: item.method ?? 'GET',
+      headers: item.headers,
+      body: item.body,
+    })
     const data = await res.json()
     return { ...item, ok: res.ok, status: res.status, data }
   } catch (error) {
     return { ...item, ok: false, status: 0, data: null, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+function gameYear(timestamp: number | null | undefined) {
+  if (!timestamp) return ''
+  return String(new Date(timestamp * 1000).getUTCFullYear())
 }
 
 async function upsertRecommendationLog(supabase: any, recommendation: any, userId: string) {
@@ -364,8 +417,11 @@ serve(async (req) => {
   const typePreference = preferredMediaTypes(previousLog ?? [])
   const bookSubject = pickMappedTerm(genreList, NORMALIZED_BOOK_SUBJECTS, 'fiction')
   const albumTerm = pickMappedTerm(genreList, NORMALIZED_ALBUM_GENRES, 'new music')
+  const gameGenre = (genreList ?? []).map(g => pickNormalized(NORMALIZED_GAME_GENRES, g)).find(Boolean)
+  const igdbClientId = Deno.env.get('IGDB_CLIENT_ID')
+  const igdbToken = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_ACCESS_TOKEN')
 
-  const urls = [
+  const urls: any[] = [
     {
       type: 'movie',
       reason: 'Queued Bot picked this as one strong movie candidate on your platforms.',
@@ -408,6 +464,44 @@ serve(async (req) => {
     },
   ]
 
+  if (igdbClientId && igdbToken) {
+    const gameHeaders = {
+      'Accept': 'application/json',
+      'Client-ID': igdbClientId,
+      'Authorization': `Bearer ${igdbToken}`,
+    }
+    urls.push(
+      {
+        type: 'game',
+        reason: gameGenre
+          ? 'Queued Bot picked this game from your genre taste signal.'
+          : 'Queued Bot picked this highly regarded game candidate.',
+        url: `${IGDB_BASE}/games`,
+        method: 'POST',
+        headers: gameHeaders,
+        body: [
+          'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
+          `where cover != null & total_rating_count > 10${gameGenre ? ` & genres = (${gameGenre})` : ''};`,
+          'sort total_rating_count desc;',
+          'limit 20;',
+        ].join(' '),
+      },
+      {
+        type: 'game',
+        reason: 'Queued Bot broadened the game search to widely rated titles.',
+        url: `${IGDB_BASE}/games`,
+        method: 'POST',
+        headers: gameHeaders,
+        body: [
+          'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
+          'where cover != null & total_rating_count > 25;',
+          'sort total_rating_count desc;',
+          'limit 30;',
+        ].join(' '),
+      },
+    )
+  }
+
   const responses = await Promise.all(urls.map(fetchJson))
   const candidates = responses.flatMap(({ type, reason, data }) => {
     const sourceData = data ?? {}
@@ -439,6 +533,27 @@ serve(async (req) => {
           genre: item.primaryGenreName ?? albumTerm,
           score: Number(item.trackCount ?? 1),
         }))
+    }
+
+    if (type === 'game') {
+      return (Array.isArray(sourceData) ? sourceData : [])
+        .filter((item: any) => item.cover?.image_id)
+        .map((item: any) => {
+          const developer = (item.involved_companies ?? []).find((entry: any) => entry.developer)
+          return {
+            type,
+            reason,
+            media_id: String(item.id),
+            media_title: item.name,
+            media_creator: developer?.company?.name ?? item.involved_companies?.[0]?.company?.name ?? null,
+            media_poster_url: `${IGDB_COVER}/${item.cover.image_id}.jpg`,
+            genre: item.genres?.map((g: any) => g.name).join(' ') ?? '',
+            year: gameYear(item.first_release_date),
+            score: Number(item.total_rating ?? 0) * Math.log10((item.total_rating_count ?? 0) + 10) / 20,
+            vote_average: item.total_rating ? item.total_rating / 10 : null,
+            vote_count: item.total_rating_count ?? 0,
+          }
+        })
     }
 
     return (sourceData.results ?? []).map((item: any) => ({
