@@ -10,6 +10,117 @@ const ITUNES_BASE = 'https://itunes.apple.com'
 const DEFAULT_PLATFORMS = [8, 9, 15, 337, 384] // Netflix, Prime, Hulu, Disney+, Max
 const ACTIVE_STATUSES = ['not_yet_viewed', 'queued', 'in_progress']
 
+const FALLBACK_CANDIDATES = [
+  {
+    type: 'movie',
+    media_id: 'queued-fallback-movie-arrival',
+    media_title: 'Arrival',
+    media_creator: 'Denis Villeneuve',
+    media_poster_url: null,
+    genre: 'Sci-Fi Drama',
+    score: 4.7,
+  },
+  {
+    type: 'movie',
+    media_id: 'queued-fallback-movie-paddington-2',
+    media_title: 'Paddington 2',
+    media_creator: 'Paul King',
+    media_poster_url: null,
+    genre: 'Comedy Family',
+    score: 4.6,
+  },
+  {
+    type: 'movie',
+    media_id: 'queued-fallback-movie-portrait-of-a-lady-on-fire',
+    media_title: 'Portrait of a Lady on Fire',
+    media_creator: 'Celine Sciamma',
+    media_poster_url: null,
+    genre: 'Drama Romance',
+    score: 4.5,
+  },
+  {
+    type: 'tv',
+    media_id: 'queued-fallback-tv-the-bear',
+    media_title: 'The Bear',
+    media_creator: 'Christopher Storer',
+    media_poster_url: null,
+    genre: 'Drama Comedy Food',
+    score: 4.6,
+  },
+  {
+    type: 'tv',
+    media_id: 'queued-fallback-tv-station-eleven',
+    media_title: 'Station Eleven',
+    media_creator: 'Patrick Somerville',
+    media_poster_url: null,
+    genre: 'Drama Sci-Fi',
+    score: 4.5,
+  },
+  {
+    type: 'tv',
+    media_id: 'queued-fallback-tv-over-the-garden-wall',
+    media_title: 'Over the Garden Wall',
+    media_creator: 'Patrick McHale',
+    media_poster_url: null,
+    genre: 'Animation Fantasy Mystery',
+    score: 4.5,
+  },
+  {
+    type: 'book',
+    media_id: 'queued-fallback-book-tomorrow-and-tomorrow-and-tomorrow',
+    media_title: 'Tomorrow, and Tomorrow, and Tomorrow',
+    media_creator: 'Gabrielle Zevin',
+    media_poster_url: null,
+    genre: 'Literary fiction',
+    score: 4.4,
+  },
+  {
+    type: 'book',
+    media_id: 'queued-fallback-book-the-wager',
+    media_title: 'The Wager',
+    media_creator: 'David Grann',
+    media_poster_url: null,
+    genre: 'Nonfiction Biography',
+    score: 4.4,
+  },
+  {
+    type: 'book',
+    media_id: 'queued-fallback-book-exhalation',
+    media_title: 'Exhalation',
+    media_creator: 'Ted Chiang',
+    media_poster_url: null,
+    genre: 'Short stories Sci-Fi',
+    score: 4.5,
+  },
+  {
+    type: 'album',
+    media_id: 'queued-fallback-album-dragon-new-warm-mountain',
+    media_title: 'Dragon New Warm Mountain I Believe in You',
+    media_creator: 'Big Thief',
+    media_poster_url: null,
+    genre: 'Indie Folk',
+    score: 4.4,
+  },
+  {
+    type: 'album',
+    media_id: 'queued-fallback-album-random-access-memories',
+    media_title: 'Random Access Memories',
+    media_creator: 'Daft Punk',
+    media_poster_url: null,
+    genre: 'Electronic Pop',
+    score: 4.5,
+  },
+  {
+    type: 'album',
+    media_id: 'queued-fallback-album-songs-in-the-key-of-life',
+    media_title: 'Songs in the Key of Life',
+    media_creator: 'Stevie Wonder',
+    media_poster_url: null,
+    genre: 'Soul Pop',
+    score: 4.7,
+  },
+]
+
 const GENRE_IDS: Record<string, number> = {
   Action: 28,
   Comedy: 35,
@@ -126,6 +237,16 @@ function recommendationNote(item: any, user: any, reason: string) {
   const score = item.vote_average ? `${item.vote_average.toFixed(1)} stars` : 'strong audience response'
   const genres = user?.favorite_genres?.length ? ` It is nudged toward ${user.favorite_genres.slice(0, 3).join(', ')}.` : ''
   return `${reason} ${score} from ${(item.vote_count ?? 0).toLocaleString()} ratings.${genres}`.slice(0, 500)
+}
+
+async function fetchJson(item: any) {
+  try {
+    const res = await fetch(item.url)
+    const data = await res.json()
+    return { ...item, ok: res.ok, status: res.status, data }
+  } catch (error) {
+    return { ...item, ok: false, status: 0, data: null, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 async function upsertRecommendationLog(supabase: any, recommendation: any, userId: string) {
@@ -287,10 +408,11 @@ serve(async (req) => {
     },
   ]
 
-  const responses = await Promise.all(urls.map(item => fetch(item.url).then(res => res.json()).then(data => ({ ...item, data }))))
+  const responses = await Promise.all(urls.map(fetchJson))
   const candidates = responses.flatMap(({ type, reason, data }) => {
+    const sourceData = data ?? {}
     if (type === 'book') {
-      return (data.works ?? [])
+      return (sourceData.works ?? [])
         .filter((item: any) => item.cover_id)
         .map((item: any) => ({
           type,
@@ -305,7 +427,7 @@ serve(async (req) => {
     }
 
     if (type === 'album') {
-      return (data.results ?? [])
+      return (sourceData.results ?? [])
         .filter((item: any) => item.artworkUrl100)
         .map((item: any) => ({
           type,
@@ -319,7 +441,7 @@ serve(async (req) => {
         }))
     }
 
-    return (data.results ?? []).map((item: any) => ({
+    return (sourceData.results ?? []).map((item: any) => ({
       type,
       reason,
       media_id: String(item.id),
@@ -333,10 +455,16 @@ serve(async (req) => {
     }))
   })
 
+  candidates.push(...FALLBACK_CANDIDATES.map(candidate => ({
+    ...candidate,
+    reason: 'Queued Bot used a trusted fallback pick after live media sources came up short.',
+  })))
+
   candidates.sort((a, b) => {
     return scoreCandidate(b, typePreference, genreList) - scoreCandidate(a, typePreference, genreList)
   })
 
+  let lastInsertError: string | null = null
   for (const candidate of candidates) {
     const mediaId = candidate.media_id
     if (seen.has(`${candidate.type}:${mediaId}`)) continue
@@ -365,7 +493,30 @@ serve(async (req) => {
 
       return json({ ok: true, sent: 1, active: false, recommendation: data })
     }
+
+    lastInsertError = error.message
   }
 
-  return json({ ok: true, sent: 0, active: false, exhausted: true })
+  if (lastInsertError) {
+    return json({ error: `Queued Bot found candidates but could not save one: ${lastInsertError}` }, 500)
+  }
+
+  return json({
+    ok: true,
+    sent: 0,
+    active: false,
+    exhausted: true,
+    diagnostics: {
+      source_count: responses.length,
+      candidate_count: candidates.length,
+      seen_count: seen.size,
+      source_statuses: responses.map(({ type, ok, status, data, error }) => ({
+        type,
+        ok,
+        status,
+        result_count: type === 'album' ? (data?.results?.length ?? 0) : (data?.results?.length ?? data?.works?.length ?? 0),
+        error,
+      })),
+    },
+  })
 })
