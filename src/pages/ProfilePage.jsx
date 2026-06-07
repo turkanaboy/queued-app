@@ -10,6 +10,7 @@ import { displayRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
+import { RecommendationSheet } from './AddRecommendationPage'
 import {
   ACTIVE_STATUSES,
   C,
@@ -65,6 +66,7 @@ export default function ProfilePage() {
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [botLoading, setBotLoading] = useState(false)
   const [botResult, setBotResult] = useState(null)
+  const [recommendItem, setRecommendItem] = useState(null)
 
   useEffect(() => {
     fetchProfile()
@@ -510,7 +512,8 @@ export default function ProfilePage() {
       </div>
 
       {showLogSheet && <LogMediaSheet userId={session.user.id} onClose={() => setShowLogSheet(false)} onSaved={handleLogSheetSaved} />}
-      {editingLogItem && <RatingModal item={editingLogItem} existingEntry={editingLogItem} onClose={() => setEditingLogItem(null)} onSaved={() => { fetchMediaLog(); fetchStats(); setEditingLogItem(null) }} />}
+      {editingLogItem && <RatingModal item={editingLogItem} existingEntry={editingLogItem} onClose={() => setEditingLogItem(null)} onSaved={() => { fetchMediaLog(); fetchStats(); setEditingLogItem(null) }} onRecommend={() => { setRecommendItem(editingLogItem); setEditingLogItem(null) }} />}
+      {recommendItem && <RecommendationSheet initialItem={recommendItem} onClose={() => setRecommendItem(null)} />}
     </div>
   )
 }
