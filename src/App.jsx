@@ -9,6 +9,7 @@ import AddRecommendationPage from './pages/AddRecommendationPage'
 import ProfilePage from './pages/ProfilePage'
 import CollectionPage from './pages/CollectionPage'
 import QueuedUpPage from './pages/QueuedUpPage'
+import TriviaChallengePage from './pages/TriviaChallengePage'
 import Layout from './components/Layout'
 import { acceptStoredInvite, getInviteFromUrl, getStoredInvite, rememberInvite } from './lib/invites'
 
@@ -79,6 +80,7 @@ function AppRoutes() {
           <Route path="/queued" element={<QueuedUpPage />} />
           <Route path="/collection" element={<CollectionPage />} />
           <Route path="/profile/:userId?" element={<ProfilePage />} />
+          <Route path="/trivia/:challengeId" element={<TriviaChallengePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
