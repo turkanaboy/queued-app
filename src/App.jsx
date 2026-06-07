@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
@@ -9,6 +10,7 @@ import ProfilePage from './pages/ProfilePage'
 import CollectionPage from './pages/CollectionPage'
 import QueuedUpPage from './pages/QueuedUpPage'
 import Layout from './components/Layout'
+import { acceptStoredInvite, getInviteFromUrl, getStoredInvite, rememberInvite } from './lib/invites'
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth()
@@ -24,9 +26,36 @@ function RequireUsername({ children }) {
   return children
 }
 
+function InviteHandler() {
+  const { session, profile, loading } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const acceptingRef = useRef(false)
+
+  useEffect(() => {
+    const invite = getInviteFromUrl(location.search)
+    if (invite) rememberInvite(invite)
+  }, [location.search])
+
+  useEffect(() => {
+    if (loading || acceptingRef.current || !session || !profile || !getStoredInvite()) return
+
+    acceptingRef.current = true
+    acceptStoredInvite()
+      .then(accepted => {
+        if (accepted && profile?.username && location.pathname !== '/friends') navigate('/friends', { replace: true })
+      })
+      .catch(() => {})
+      .finally(() => { acceptingRef.current = false })
+  }, [loading, session, profile, location.pathname, navigate])
+
+  return null
+}
+
 function AppRoutes() {
   return (
     <BrowserRouter>
+      <InviteHandler />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 

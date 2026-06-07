@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
+import { acceptStoredInvite } from '../lib/invites'
 
 export default function SetupPage() {
   const { session, refreshProfile } = useAuth()
@@ -58,6 +59,11 @@ export default function SetupPage() {
     })
     if (error) { setError(error.message); setLoading(false); return }
     await refreshProfile()
+    try {
+      await acceptStoredInvite()
+    } catch {
+      // Invite completion is best-effort; setup should still finish.
+    }
 
     const token = (await supabase.auth.getSession()).data.session?.access_token
     fetch(

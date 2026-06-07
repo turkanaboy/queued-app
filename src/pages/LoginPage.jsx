@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { getInviteFromUrl, rememberInvite } from '../lib/invites'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -11,9 +12,13 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    const invite = getInviteFromUrl()
+    if (invite) rememberInvite(invite)
+    const redirectUrl = new URL('/', window.location.origin)
+    if (invite) redirectUrl.searchParams.set('invite', invite)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: redirectUrl.toString() },
     })
     if (error) setError(error.message)
     else setSent(true)

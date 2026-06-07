@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { EmptyState, ScreenHeader, SearchField, SectionTitle } from '../lib/queuedDesign'
+import { buildInviteLink, getOrCreateInviteToken } from '../lib/invites'
 
 export default function FriendsPage() {
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -14,6 +15,7 @@ export default function FriendsPage() {
   const [pending, setPending] = useState([])
   const [incoming, setIncoming] = useState([])
   const [loading, setLoading] = useState(true)
+  const [inviteStatus, setInviteStatus] = useState('')
 
   useEffect(() => { fetchFriendships() }, [session])
 
@@ -67,10 +69,41 @@ export default function FriendsPage() {
     fetchFriendships()
   }
 
+  async function copyInviteLink() {
+    setInviteStatus('Copying...')
+    try {
+      const token = await getOrCreateInviteToken(session.user.id)
+      const link = buildInviteLink(token)
+      await navigator.clipboard.writeText(link)
+      setInviteStatus('Copied')
+    } catch {
+      setInviteStatus('Copy failed')
+    }
+    window.setTimeout(() => setInviteStatus(''), 1800)
+  }
+
   return (
     <div className="pb-5">
       <ScreenHeader title="Friends" subtitle="Find people and see their recommendations" />
       <div className="space-y-5 px-[18px]">
+        <section className="rounded-[18px] border border-[rgba(216,168,74,0.26)] bg-[linear-gradient(135deg,rgba(216,168,74,0.16),rgba(45,212,143,0.08))] p-4 shadow-[inset_3px_0_0_rgba(216,168,74,0.48)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-[#F7F1E4]">Invite a friend</p>
+              <p className="mt-0.5 truncate text-xs text-[rgba(214,240,224,0.58)]">
+                They will join connected to {profile?.display_name || profile?.username}.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-4 py-2 text-xs font-extrabold text-[#052016]"
+            >
+              {inviteStatus || 'Copy link'}
+            </button>
+          </div>
+        </section>
+
         <div className="relative">
           <SearchField value={searchQuery} onChange={search} placeholder="Search by username..." />
           {searchResults.length > 0 && (
