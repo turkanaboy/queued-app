@@ -81,6 +81,8 @@ const NORMALIZED_TMDB_GENRES = Object.fromEntries(Object.entries(TMDB_GENRES).ma
 const NORMALIZED_BOOK_SUBJECTS = Object.fromEntries(Object.entries(BOOK_SUBJECTS).map(([key, value]) => [normalizeText(key), value]))
 const NORMALIZED_ALBUM_TERMS = Object.fromEntries(Object.entries(ALBUM_TERMS).map(([key, value]) => [normalizeText(key), value]))
 const NORMALIZED_IGDB_GENRES = Object.fromEntries(Object.entries(IGDB_GENRES).map(([key, value]) => [normalizeText(key), value]))
+let igdbAccessToken: string | null = null
+let igdbAccessTokenExpiresAt = 0
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -234,7 +236,7 @@ function uniqueMediaResults(results: any[], limit = 12) {
 
 async function igdb(endpoint: string, body: string) {
   const clientId = Deno.env.get('IGDB_CLIENT_ID')
-  const token = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_ACCESS_TOKEN')
+  const token = await getIgdbAccessToken(clientId)
   if (!clientId || !token) throw new Error('IGDB_CLIENT_ID and IGDB_API_KEY are required for game search.')
 
   const res = await fetch(`${IGDB_BASE}/${endpoint}`, {
@@ -251,6 +253,34 @@ async function igdb(endpoint: string, body: string) {
     throw new Error(`IGDB ${endpoint} error ${res.status}: ${text}`)
   }
   return await res.json()
+}
+
+async function getIgdbAccessToken(clientId: string | undefined | null) {
+  const directToken = Deno.env.get('IGDB_ACCESS_TOKEN')
+  if (directToken) return directToken
+  if (igdbAccessToken && Date.now() < igdbAccessTokenExpiresAt) return igdbAccessToken
+
+  const clientSecret = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_CLIENT_SECRET')
+  if (!clientId || !clientSecret) return null
+
+  const res = await fetch('https://id.twitch.tv/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials',
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`IGDB token error ${res.status}: ${text}`)
+  }
+
+  const data = await res.json()
+  igdbAccessToken = data.access_token
+  igdbAccessTokenExpiresAt = Date.now() + Math.max(0, Number(data.expires_in ?? 0) - 60) * 1000
+  return igdbAccessToken
 }
 
 serve(async (req) => {

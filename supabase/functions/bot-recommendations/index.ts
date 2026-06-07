@@ -245,6 +245,8 @@ const NORMALIZED_GENRE_IDS = normalizedEntries(GENRE_IDS)
 const NORMALIZED_BOOK_SUBJECTS = normalizedEntries(BOOK_SUBJECTS)
 const NORMALIZED_ALBUM_GENRES = normalizedEntries(ALBUM_GENRES)
 const NORMALIZED_GAME_GENRES = normalizedEntries(GAME_GENRES)
+let igdbAccessToken: string | null = null
+let igdbAccessTokenExpiresAt = 0
 
 function pickNormalized<T>(map: Record<string, T>, key: string) {
   return map[normalizeText(key)] ?? null
@@ -300,6 +302,34 @@ async function fetchJson(item: any) {
 function gameYear(timestamp: number | null | undefined) {
   if (!timestamp) return ''
   return String(new Date(timestamp * 1000).getUTCFullYear())
+}
+
+async function getIgdbAccessToken(clientId: string | undefined | null) {
+  const directToken = Deno.env.get('IGDB_ACCESS_TOKEN')
+  if (directToken) return directToken
+  if (igdbAccessToken && Date.now() < igdbAccessTokenExpiresAt) return igdbAccessToken
+
+  const clientSecret = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_CLIENT_SECRET')
+  if (!clientId || !clientSecret) return null
+
+  const res = await fetch('https://id.twitch.tv/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials',
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`IGDB token error ${res.status}: ${text}`)
+  }
+
+  const data = await res.json()
+  igdbAccessToken = data.access_token
+  igdbAccessTokenExpiresAt = Date.now() + Math.max(0, Number(data.expires_in ?? 0) - 60) * 1000
+  return igdbAccessToken
 }
 
 async function upsertRecommendationLog(supabase: any, recommendation: any, userId: string) {
@@ -419,7 +449,7 @@ serve(async (req) => {
   const albumTerm = pickMappedTerm(genreList, NORMALIZED_ALBUM_GENRES, 'new music')
   const gameGenre = (genreList ?? []).map(g => pickNormalized(NORMALIZED_GAME_GENRES, g)).find(Boolean)
   const igdbClientId = Deno.env.get('IGDB_CLIENT_ID')
-  const igdbToken = Deno.env.get('IGDB_API_KEY') ?? Deno.env.get('IGDB_ACCESS_TOKEN')
+  const igdbToken = await getIgdbAccessToken(igdbClientId)
 
   const urls: any[] = [
     {
