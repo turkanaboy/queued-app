@@ -320,7 +320,10 @@ export default function ProfilePage() {
         origin_user_id: rec.recipient_id,
       })),
       ...mediaLog
-        .filter(item => !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item)))
+        .filter(item =>
+          !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item)) &&
+          !sentRecommendations.some(rec => mediaKey(rec) === mediaKey(item))
+        )
         .map(item => ({
           ...item,
           item_kind: 'log',
@@ -337,8 +340,10 @@ export default function ProfilePage() {
   if (loading) return <div className="flex items-center justify-center pt-20 text-white/40">Loading...</div>
   if (!profile) return <div className="flex items-center justify-center pt-20 text-white/40">User not found.</div>
 
-  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, allItems.filter(item => item.media_type === type).length]))
-  const mediumItems = allItems.filter(item => item.media_type === medium)
+  // Deduplicated personal-log count: exclude sent recs (they aren't the user's own logged titles)
+  const loggedCount = allItems.filter(item => item.item_kind !== 'sent').length
+  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, allItems.filter(item => item.media_type === type && item.item_kind !== 'sent').length]))
+  const mediumItems = allItems.filter(item => item.media_type === medium && item.item_kind !== 'sent')
   const filteredItems = mediumItems.filter(item => statusFilter === 'all' || item.status === statusFilter)
   const visibleItems = sortOrder === 'ratingDesc'
     ? [...filteredItems].sort((a, b) => {
@@ -374,7 +379,7 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-lg font-extrabold text-[#F7F1E4]">{profile.display_name || profile.username}</p>
-              <p className="font-mono-q text-[10.5px] text-[rgba(214,240,224,0.5)]">{stats?.friends ?? 0} friends · {stats?.logged ?? 0} logged</p>
+              <p className="font-mono-q text-[10.5px] text-[rgba(214,240,224,0.5)]">{stats?.friends ?? 0} friends · {loggedCount} logged</p>
             </div>
             {isOwnProfile && (
               <div className="flex items-center gap-2">
