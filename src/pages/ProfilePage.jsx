@@ -11,6 +11,7 @@ import { upsertMediaLog } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 import { RecommendationSheet } from './AddRecommendationPage'
+import { fetchMyChallenges } from '../lib/trivia'
 import {
   ACTIVE_STATUSES,
   C,
@@ -67,6 +68,7 @@ export default function ProfilePage() {
   const [botLoading, setBotLoading] = useState(false)
   const [botResult, setBotResult] = useState(null)
   const [recommendItem, setRecommendItem] = useState(null)
+  const [triviaHistory, setTriviaHistory] = useState([])
 
   useEffect(() => {
     fetchProfile()
@@ -75,7 +77,17 @@ export default function ProfilePage() {
     fetchRecommendationQueue()
     fetchSentRecommendations()
     fetchActivity()
+    fetchTriviaHistory()
   }, [targetId])
+
+  async function fetchTriviaHistory() {
+    try {
+      const data = await fetchMyChallenges(targetId)
+      setTriviaHistory(data.filter(c => c.status === 'completed'))
+    } catch {
+      // Non-fatal — trivia section just stays empty
+    }
+  }
 
   async function fetchProfile() {
     const { data } = await supabase.from('users').select('*').eq('id', targetId).single()
@@ -494,6 +506,10 @@ export default function ProfilePage() {
           saving={saving}
         />
 
+        {triviaHistory.length > 0 && (
+          <TriviaHistorySection challenges={triviaHistory} userId={targetId} />
+        )}
+
         {activity.length > 0 && (
           <section>
             <SectionTitle>Finished from friends</SectionTitle>
@@ -718,6 +734,76 @@ function PlatformsSection({ isOwnProfile, profile, editing, setEditing, selected
           return p ? <span key={id} className="rounded-full px-3 py-1.5 text-xs font-bold text-white" style={{ background: p.color }}>{platformInitials(p.name)}</span> : null
         })}</div>
       ) : <p className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-center text-sm text-[rgba(214,240,224,0.5)]">No platforms listed</p>}
+    </section>
+  )
+}
+
+function TriviaHistorySection({ challenges, userId }) {
+  const navigate = useNavigate()
+
+  // Compute aggregate stats
+  let wins = 0, losses = 0, ties = 0
+  for (const c of challenges) {
+    const myScore = c.initiator_id === userId ? c.initiator_score : c.challenger_score
+    const theirScore = c.initiator_id === userId ? c.challenger_score : c.initiator_score
+    if (myScore == null || theirScore == null) continue
+    if (myScore > theirScore) wins++
+    else if (myScore < theirScore) losses++
+    else ties++
+  }
+
+  return (
+    <section>
+      <div className="mb-2.5 flex items-center justify-between">
+        <SectionTitle count={challenges.length}>Trivia history</SectionTitle>
+        <div className="font-mono-q flex gap-3 text-[10px] font-semibold uppercase tracking-[1px]">
+          <span className="text-[#2DD48F]">{wins}W</span>
+          <span className="text-rose-400">{losses}L</span>
+          {ties > 0 && <span className="text-[rgba(214,240,224,0.5)]">{ties}T</span>}
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+        {challenges.slice(0, 10).map((c, i) => {
+          const isInitiator = c.initiator_id === userId
+          const opponent = isInitiator ? c.challenger : c.initiator
+          const myScore = isInitiator ? c.initiator_score : c.challenger_score
+          const theirScore = isInitiator ? c.challenger_score : c.initiator_score
+
+          let outcome = '—', outcomeColor = 'text-[rgba(214,240,224,0.5)]'
+          if (myScore != null && theirScore != null) {
+            if (myScore > theirScore) { outcome = 'Won'; outcomeColor = 'text-[#2DD48F]' }
+            else if (myScore < theirScore) { outcome = 'Lost'; outcomeColor = 'text-rose-400' }
+            else { outcome = 'Tied'; outcomeColor = 'text-[#D8A84A]' }
+          }
+
+          const modeLabel = c.mode === 'balanced' ? 'Balanced' : c.mode === 'my_media' ? 'My Media' : 'Random'
+
+          return (
+            <button
+              key={c.id}
+              onClick={() => navigate(`/trivia/${c.id}`)}
+              className={`btn-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left ${i > 0 ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <InitialsAvatar name={opponent?.display_name || opponent?.username || '?'} size="sm" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[#F7F1E4]">{opponent?.display_name || opponent?.username || 'Unknown'}</p>
+                  <p className="font-mono-q text-[10px] uppercase tracking-[1px] text-[rgba(214,240,224,0.42)]">
+                    🎯 {modeLabel}
+                    {c.completed_at && ` · ${new Date(c.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-mono-q text-sm font-extrabold text-[#F7F1E4]">
+                  {myScore ?? '?'}<span className="text-xs text-[rgba(214,240,224,0.35)]">/{13}</span>
+                </p>
+                <p className={`text-[11px] font-bold ${outcomeColor}`}>{outcome}</p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </section>
   )
 }
