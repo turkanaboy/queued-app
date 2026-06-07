@@ -422,7 +422,7 @@ serve(async (req) => {
           media_creator: item.authors?.[0]?.name ?? null,
           media_poster_url: item.cover_id ? `${OL_COVER}/${item.cover_id}-M.jpg` : null,
           genre: bookSubject,
-          score: Number(item.edition_count ?? 1),
+          score: Math.log10(Number(item.edition_count ?? 1) + 1) * 10,
         }))
     }
 

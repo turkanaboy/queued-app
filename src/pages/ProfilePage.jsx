@@ -119,7 +119,7 @@ export default function ProfilePage() {
     const { data } = await query
       .eq('user_id', targetId)
       .order('created_at', { ascending: false })
-      .limit(60)
+      .limit(300)
     setMediaLog(data ?? [])
   }
 
@@ -313,7 +313,7 @@ export default function ProfilePage() {
           status: item.status ?? (item.rating ? 'finished' : 'queued'),
           origin: item.source_type === 'recommendation' && item.source_user
             ? (item.source_user.display_name || item.source_user.username)
-            : 'Added by you',
+            : 'Self',
           origin_type: item.source_type === 'recommendation' ? 'recommendation' : 'self',
           origin_user_id: item.source_user_id,
         })),
