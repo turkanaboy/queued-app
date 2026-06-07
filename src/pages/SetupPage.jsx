@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
 import { acceptStoredInvite } from '../lib/invites'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 
 export default function SetupPage() {
   const { session, refreshProfile } = useAuth()
@@ -65,19 +66,10 @@ export default function SetupPage() {
       // Invite completion is best-effort; setup should still finish.
     }
 
-    const token = (await supabase.auth.getSession()).data.session?.access_token
-    fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ user_id: session.user.id }),
-      }
-    ).catch(() => {})
+    invokeEdgeFunction('bot-recommendations', {
+      method: 'POST',
+      body: { user_id: session.user.id },
+    }).catch(() => {})
 
     navigate('/friends')
   }

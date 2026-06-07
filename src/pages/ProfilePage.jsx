@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
@@ -83,11 +84,15 @@ export default function ProfilePage() {
   }
 
   async function fetchStats() {
+    const logTable = isOwnProfile ? 'user_media_log' : 'friend_media_log'
+    const finishedQuery = isOwnProfile
+      ? supabase.from('recommendations').select('rating').eq('recipient_id', targetId).eq('recipient_status', 'finished').is('deleted_at', null)
+      : supabase.from('friend_recommendation_activity').select('rating').eq('recipient_id', targetId)
     const [sent, received, finished, logged, friends] = await Promise.all([
       supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('sender_id', targetId).is('deleted_at', null),
       supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('recipient_id', targetId).is('deleted_at', null),
-      supabase.from('recommendations').select('rating').eq('recipient_id', targetId).eq('recipient_status', 'finished').is('deleted_at', null),
-      supabase.from('user_media_log').select('*', { count: 'exact', head: true }).eq('user_id', targetId),
+      finishedQuery,
+      supabase.from(logTable).select('*', { count: 'exact', head: true }).eq('user_id', targetId),
       supabase.from('friendships').select('*', { count: 'exact', head: true }).or(`user_a_id.eq.${targetId},user_b_id.eq.${targetId}`).eq('status', 'accepted'),
     ])
     const ratings = (finished.data ?? []).map(r => r.rating).filter(Boolean)
@@ -102,9 +107,15 @@ export default function ProfilePage() {
   }
 
   async function fetchMediaLog() {
-    const { data } = await supabase
-      .from('user_media_log')
-      .select('*, source_user:source_user_id(username, display_name)')
+    const query = isOwnProfile
+      ? supabase
+        .from('user_media_log')
+        .select('*, source_user:source_user_id(username, display_name)')
+      : supabase
+        .from('friend_media_log')
+        .select('*')
+
+    const { data } = await query
       .eq('user_id', targetId)
       .order('created_at', { ascending: false })
       .limit(60)
@@ -132,12 +143,18 @@ export default function ProfilePage() {
   }
 
   async function fetchActivity() {
-    const { data } = await supabase
-      .from('recommendations')
-      .select('id, media_title, media_poster_url, media_type, rating, created_at')
+    const query = isOwnProfile
+      ? supabase
+        .from('recommendations')
+        .select('id, media_title, media_poster_url, media_type, rating, created_at')
+        .eq('recipient_status', 'finished')
+        .is('deleted_at', null)
+      : supabase
+        .from('friend_recommendation_activity')
+        .select('id, media_title, media_poster_url, media_type, rating, created_at')
+
+    const { data } = await query
       .eq('recipient_id', targetId)
-      .eq('recipient_status', 'finished')
-      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(20)
     setActivity(data ?? [])
@@ -190,14 +207,11 @@ export default function ProfilePage() {
     setBotLoading(true)
     setBotResult(null)
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bot-recommendations`, {
+      const json = await invokeEdgeFunction('bot-recommendations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ user_id: session.user.id, force_new: true }),
+        body: { user_id: session.user.id, force_new: true },
       })
-      const json = await res.json()
-      setBotResult(res.ok ? json : { error: json.error || 'Queued Bot could not make a pick.' })
+      setBotResult(json)
       await Promise.all([fetchRecommendationQueue(), fetchSentRecommendations(), fetchMediaLog(), fetchStats()])
     } catch (err) {
       setBotResult({ error: err.message || 'Queued Bot could not make a pick.' })

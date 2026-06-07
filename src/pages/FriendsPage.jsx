@@ -16,6 +16,7 @@ export default function FriendsPage() {
   const [incoming, setIncoming] = useState([])
   const [loading, setLoading] = useState(true)
   const [inviteStatus, setInviteStatus] = useState('')
+  const [friendError, setFriendError] = useState('')
 
   useEffect(() => { fetchFriendships() }, [session])
 
@@ -53,7 +54,16 @@ export default function FriendsPage() {
   async function sendRequest(userId) {
     const uid = session.user.id
     const [a, b] = uid < userId ? [uid, userId] : [userId, uid]
-    await supabase.from('friendships').insert({ user_a_id: a, user_b_id: b, requester_id: uid, status: 'pending' })
+    setFriendError('')
+    const { error } = await supabase
+      .from('friendships')
+      .upsert({ user_a_id: a, user_b_id: b, requester_id: uid, status: 'pending' }, { onConflict: 'user_a_id,user_b_id', ignoreDuplicates: true })
+
+    if (error) {
+      setFriendError(error.message)
+      return
+    }
+
     setSearchResults([])
     setSearchQuery('')
     fetchFriendships()
@@ -122,6 +132,7 @@ export default function FriendsPage() {
               ))}
             </div>
           )}
+          {friendError && <p className="mt-2 rounded-[14px] border border-rose-300/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{friendError}</p>}
         </div>
 
         {incoming.length > 0 && (

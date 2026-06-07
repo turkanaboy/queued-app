@@ -69,6 +69,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -154,12 +157,32 @@ async function upsertRecommendationLog(supabase: any, recommendation: any, userI
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const { user_id, force_new = false } = await req.json()
+  let body: { user_id?: string; force_new?: boolean }
+  try {
+    body = await req.json()
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400)
+  }
+
+  const { user_id, force_new = false } = body
   if (!user_id) return json({ error: 'user_id required' }, 400)
 
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? req.headers.get('apikey')
+  if (!anonKey) return json({ error: 'Supabase anon key is not configured for Queued Bot.' }, 500)
+
+  const userClient = createClient(SUPABASE_URL, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  })
+  const { data: authData, error: authError } = await userClient.auth.getUser()
+  if (authError || !authData.user || authData.user.id !== user_id) {
+    return json({ error: 'forbidden' }, 403)
+  }
+
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   )
 

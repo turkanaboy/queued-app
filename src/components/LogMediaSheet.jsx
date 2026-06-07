@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, stepToRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
@@ -34,12 +34,9 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?query=${encodeURIComponent(q)}&type=${type}`,
-        { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
-      )
-      const json = await res.json()
+      const json = await invokeEdgeFunction('search-media', {
+        path: `?query=${encodeURIComponent(q)}&type=${type}`,
+      })
       setResults(json.results ?? [])
       setSearching(false)
     }, 400)
@@ -52,12 +49,9 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
       setProviders([])
       return
     }
-    const token = (await supabase.auth.getSession()).data.session?.access_token
-    const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`,
-      { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
-    )
-    const json = await res.json()
+    const json = await invokeEdgeFunction('search-media', {
+      path: `?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`,
+    })
     setProviders(json.providers ?? [])
   }
 

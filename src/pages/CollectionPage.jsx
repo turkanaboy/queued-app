@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import RatingModal from '../components/RatingModal'
 import { RecommendationSheet } from './AddRecommendationPage'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
@@ -9,12 +10,7 @@ import { displayRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
 
 async function searchMedia(path) {
-  const token = (await supabase.auth.getSession()).data.session?.access_token
-  const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`,
-    { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
-  )
-  return res.json()
+  return invokeEdgeFunction('search-media', { path })
 }
 
 async function fetchTrending(mediaType, page = 1, genre = 'all') {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { PosterTile, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, ratingToStep, stepToRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
@@ -24,12 +24,9 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved, onR
       if (!item?.media_type || !item?.media_id) return
       setLoadingDetails(true)
       try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media?action=details&media_type=${item.media_type}&media_id=${encodeURIComponent(item.media_id)}`,
-          { headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
-        )
-        const json = await res.json()
+        const json = await invokeEdgeFunction('search-media', {
+          path: `?action=details&media_type=${item.media_type}&media_id=${encodeURIComponent(item.media_id)}`,
+        })
         if (!cancelled && json.details) {
           setDetails(prev => Object.fromEntries(
             Object.entries({ ...prev, ...json.details }).map(([key, value]) => [key, value ?? prev[key]])
