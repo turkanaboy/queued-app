@@ -38,7 +38,7 @@ function InviteHandler() {
   }, [location.search])
 
   useEffect(() => {
-    if (loading || acceptingRef.current || !session || !profile || !getStoredInvite()) return
+    if (loading || acceptingRef.current || !session || !profile?.username || !getStoredInvite()) return
 
     acceptingRef.current = true
     acceptStoredInvite()

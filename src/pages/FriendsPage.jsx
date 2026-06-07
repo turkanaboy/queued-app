@@ -29,6 +29,7 @@ export default function FriendsPage() {
     const accepted = [], pendingOut = [], pendingIn = []
     for (const f of data ?? []) {
       const friend = f.user_a_id === uid ? f.user_b : f.user_a
+      if (!friend?.username && !friend?.display_name) continue
       if (f.status === 'accepted') accepted.push({ ...f, friend })
       else if (f.requester_id === uid) pendingOut.push({ ...f, friend })
       else pendingIn.push({ ...f, friend })

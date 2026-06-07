@@ -55,7 +55,7 @@ function RecommendationComposer({ compact = false, onDone, initialItem = null })
       .select('*, user_a:users!friendships_user_a_id_fkey(*), user_b:users!friendships_user_b_id_fkey(*)')
       .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
       .eq('status', 'accepted')
-    setFriends((data ?? []).map(f => ({ ...f, friend: f.user_a_id === uid ? f.user_b : f.user_a })).filter(f => f.friend != null))
+    setFriends((data ?? []).map(f => ({ ...f, friend: f.user_a_id === uid ? f.user_b : f.user_a })).filter(f => f.friend?.username || f.friend?.display_name))
   }
 
   async function checkDuplicates(mediaId, friendIds) {
