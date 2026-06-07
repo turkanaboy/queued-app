@@ -272,9 +272,8 @@ export default function TriviaChallengePage() {
     const opponentName = challenge?.initiator_id === uid
       ? displayName(challenge?.challenger)
       : displayName(challenge?.initiator)
-    const myScore = challenge?.initiator_id === uid
-      ? challenge?.initiator_score
-      : challenge?.challenger_score
+    const myScore = results?.my_score
+      ?? (challenge?.initiator_id === uid ? challenge?.initiator_score : challenge?.challenger_score)
 
     return (
       <div className="flex min-h-dvh flex-col">
@@ -544,8 +543,11 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
   const isInitiator = challenge?.initiator_id === uid
   const isChallenger = challenge?.challenger_id === uid
 
-  const myScore = isInitiator ? challenge?.initiator_score : challenge?.challenger_score
-  const theirScore = isInitiator ? challenge?.challenger_score : challenge?.initiator_score
+  // results.my_score is the fresh score from the edge function response.
+  // challenge scores are fetched before submission so they're null at first render;
+  // fall back to them only when viewing a previously-completed challenge.
+  const myScore = results?.my_score ?? (isInitiator ? challenge?.initiator_score : challenge?.challenger_score)
+  const theirScore = results?.their_score ?? (isInitiator ? challenge?.challenger_score : challenge?.initiator_score)
   const opponent = isInitiator ? challenge?.challenger : challenge?.initiator
   const opponentName = displayName(opponent)
 
