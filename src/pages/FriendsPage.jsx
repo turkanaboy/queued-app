@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useTriviaChallenges } from '../hooks/useTriviaChallenges'
 import { InitialsAvatar } from '../components/Layout'
 import { EmptyState, ScreenHeader, SearchField, SectionTitle } from '../lib/queuedDesign'
 import { buildInviteLink, getOrCreateInviteToken } from '../lib/invites'
+import TriviaSetupSheet from '../components/TriviaSetupSheet'
 
 export default function FriendsPage() {
   const { session, profile } = useAuth()
@@ -17,6 +19,10 @@ export default function FriendsPage() {
   const [loading, setLoading] = useState(true)
   const [inviteStatus, setInviteStatus] = useState('')
   const [friendError, setFriendError] = useState('')
+  const [triviaSheetOpen, setTriviaSheetOpen] = useState(false)
+
+  const { pendingChallenges, waitingChallenges } = useTriviaChallenges()
+  const uid = session?.user?.id
 
   useEffect(() => { fetchFriendships() }, [session])
 
@@ -145,6 +151,66 @@ export default function FriendsPage() {
           </section>
         )}
 
+        {/* Trivia challenge cards — pending (your turn) */}
+        {pendingChallenges.length > 0 && (
+          <section>
+            <SectionTitle count={pendingChallenges.length}>Trivia challenges</SectionTitle>
+            <div className="overflow-hidden rounded-[18px] border border-[#D8A84A]/30 bg-[rgba(216,168,74,0.07)] shadow-[inset_3px_0_0_rgba(216,168,74,0.45)]">
+              {pendingChallenges.map((c, i) => {
+                const isInitiator = c.initiator_id === uid
+                const opponent = isInitiator ? c.challenger : c.initiator
+                const label = isInitiator ? 'You challenged' : 'Challenged you'
+                return (
+                  <div key={c.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[rgba(216,168,74,0.15)]' : ''}`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <InitialsAvatar name={opponent?.display_name || opponent?.username} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-[#F7F1E4]">{opponent?.display_name || opponent?.username}</p>
+                        <p className="text-[11px] font-semibold text-[#D8A84A]">🎯 {label} · {c.mode}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/trivia/${c.id}`)}
+                      className="btn-press btn-cream shrink-0 rounded-full px-4 py-1.5 text-xs font-extrabold"
+                    >
+                      {isInitiator ? 'Answer' : 'Play'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Trivia challenge cards — waiting on opponent */}
+        {waitingChallenges.length > 0 && (
+          <section className="opacity-70">
+            <SectionTitle count={waitingChallenges.length}>Awaiting response</SectionTitle>
+            <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.45)]">
+              {waitingChallenges.map((c, i) => {
+                const opponent = c.challenger
+                return (
+                  <div key={c.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <InitialsAvatar name={opponent?.display_name || opponent?.username} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-[#F7F1E4]">{opponent?.display_name || opponent?.username}</p>
+                        <p className="text-[11px] text-[rgba(214,240,224,0.5)]">⏳ Trivia sent · waiting…</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/trivia/${c.id}`)}
+                      className="btn-press shrink-0 rounded-full border border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.55)] px-4 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)]"
+                    >
+                      View
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         <section>
           <SectionTitle count={friends.length}>Friends</SectionTitle>
           {loading ? <p className="text-sm text-white/40">Loading...</p> : friends.length === 0 ? (
@@ -153,7 +219,16 @@ export default function FriendsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
-              {friends.map((f, i) => <FriendRow key={f.id} item={f} first={i === 0} onProfile={() => navigate(`/profile/${f.friend.id}`)} onList={() => navigate(`/list/${f.friend.id}`)} />)}
+              {friends.map((f, i) => (
+                <FriendRow
+                  key={f.id}
+                  item={f}
+                  first={i === 0}
+                  onProfile={() => navigate(`/profile/${f.friend.id}`)}
+                  onList={() => navigate(`/list/${f.friend.id}`)}
+                  onChallenge={() => setTriviaSheetOpen(f)}
+                />
+              ))}
             </div>
           )}
         </section>
@@ -170,6 +245,10 @@ export default function FriendsPage() {
           </section>
         )}
       </div>
+
+      {triviaSheetOpen && (
+        <TriviaSetupSheet onClose={() => setTriviaSheetOpen(false)} />
+      )}
     </div>
   )
 }
@@ -190,12 +269,12 @@ function FriendRequestRow({ item, first, onAccept, onDecline }) {
   )
 }
 
-function FriendRow({ item, first, onProfile, onList }) {
+function FriendRow({ item, first, onProfile, onList, onChallenge }) {
   const friend = item.friend
   const shared = (friend?.sent_count ?? 0) + (friend?.received_count ?? 0)
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-3 ${first ? '' : 'border-t border-[rgba(150,214,180,0.12)]'}`}>
-      <button onClick={onProfile} className="flex min-w-0 items-center gap-3 text-left">
+      <button onClick={onProfile} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <InitialsAvatar name={friend?.display_name || friend?.username} />
         <div className="min-w-0">
           <p className="truncate text-sm font-bold text-[#F7F1E4]">{friend?.display_name || friend?.username}</p>
@@ -203,7 +282,10 @@ function FriendRow({ item, first, onProfile, onList }) {
           <p className="truncate text-[11.5px] text-[rgba(214,240,224,0.5)]">{friend?.queue_count ?? 0} in queue · {shared} recs shared</p>
         </div>
       </button>
-      <button onClick={onList} className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-4 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)]">List</button>
+      <div className="flex shrink-0 gap-1.5">
+        <button onClick={onChallenge} className="btn-press rounded-full border border-[#D8A84A]/30 bg-[rgba(216,168,74,0.1)] px-3 py-1.5 text-xs font-bold text-[#D8A84A]" title="Trivia challenge">🎯</button>
+        <button onClick={onList} className="btn-press rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] px-4 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.7)]">List</button>
+      </div>
     </div>
   )
 }

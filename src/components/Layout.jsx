@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useUnreadCount } from '../hooks/useUnreadCount'
+import { useTriviaChallenges } from '../hooks/useTriviaChallenges'
 import { RecommendationSheet } from '../pages/AddRecommendationPage'
 
 export default function Layout() {
   const unreadCount = useUnreadCount()
+  const { pendingCount: triviaPendingCount } = useTriviaChallenges()
   const [showRecommendSheet, setShowRecommendSheet] = useState(false)
 
   function refreshDiscoverIfActive() {
@@ -21,7 +23,7 @@ export default function Layout() {
 
       <nav className="fixed bottom-0 left-1/2 z-20 w-full max-w-[430px] -translate-x-1/2 px-4 pb-[calc(18px+env(safe-area-inset-bottom))] pt-2">
         <div className="flex items-center justify-between rounded-[26px] border border-[rgba(150,214,180,0.16)] bg-[rgba(4,26,18,0.9)] px-5 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-[20px]">
-          <TabItem to="/friends" label="Friends" badge={unreadCount}>
+          <TabItem to="/friends" label="Friends" badge={unreadCount + triviaPendingCount}>
             <FriendsIcon />
           </TabItem>
 
