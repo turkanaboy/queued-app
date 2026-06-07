@@ -60,6 +60,7 @@ export default function ProfilePage() {
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [medium, setMedium] = useState('movie')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [sortOrder, setSortOrder] = useState('recent')
   const [showStatusChips, setShowStatusChips] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [botLoading, setBotLoading] = useState(false)
@@ -198,6 +199,7 @@ export default function ProfilePage() {
     if (item?.media_type) {
       setMedium(item.media_type)
       setStatusFilter('all')
+      setSortOrder('recent')
     }
     fetchMediaLog()
     fetchStats()
@@ -323,7 +325,14 @@ export default function ProfilePage() {
 
   const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, allItems.filter(item => item.media_type === type).length]))
   const mediumItems = allItems.filter(item => item.media_type === medium)
-  const visibleItems = mediumItems.filter(item => statusFilter === 'all' || item.status === statusFilter)
+  const filteredItems = mediumItems.filter(item => statusFilter === 'all' || item.status === statusFilter)
+  const visibleItems = sortOrder === 'ratingDesc'
+    ? [...filteredItems].sort((a, b) => {
+      const ratingDiff = Number(b.rating ?? -1) - Number(a.rating ?? -1)
+      if (ratingDiff) return ratingDiff
+      return new Date(b.created_at) - new Date(a.created_at)
+    })
+    : filteredItems
   const statusCounts = Object.fromEntries(STATUS_ORDER.map(status => [status, mediumItems.filter(item => item.status === status).length]))
   const total = mediumItems.length
   const finished = statusCounts.finished || 0
@@ -426,15 +435,23 @@ export default function ProfilePage() {
             <p className="font-mono-q text-[11px] text-[rgba(214,240,224,0.5)]">
               {visibleItems.length} titles{statusFilter !== 'all' ? ` · ${STATUS[statusFilter].label}` : ''}
             </p>
-            {isOwnProfile && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSortOrder(sortOrder === 'ratingDesc' ? 'recent' : 'ratingDesc')}
+                aria-pressed={sortOrder === 'ratingDesc'}
+                title="Sort by rating high to low"
+                className={`btn-press inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-bold ${sortOrder === 'ratingDesc' ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(10,52,36,0.7)] text-[#F7F1E4]'}`}>
+                Rating
+              </button>
+              {isOwnProfile && (
+                <>
                 <button onClick={() => setShowStatusChips(v => !v)}
                   className={`btn-press inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-bold ${showStatusChips || statusFilter !== 'all' ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(10,52,36,0.7)] text-[#F7F1E4]'}`}>
                   <FilterIcon /> Status
                 </button>
                 <button onClick={() => setShowLogSheet(true)} className="btn-press flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#C96B4B,#B87333)] text-lg font-bold text-[#FFF8E8] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">+</button>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
           <div className={`overflow-hidden transition-[max-height] duration-300 ${showStatusChips ? 'max-h-[72px]' : 'max-h-0'}`}>
             <div className="scrollbar-none flex gap-2 overflow-x-auto pb-3">

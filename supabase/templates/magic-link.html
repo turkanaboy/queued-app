@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Your Queued sign-in link</title>
+  </head>
+  <body style="margin:0;background:#03150E;color:#F7F1E4;font-family:'Plus Jakarta Sans',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(166deg,#03150E 0%,#0A3A28 56%,#0F4E37 100%);margin:0;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;border:1px solid rgba(150,214,180,0.18);border-radius:24px;background:#082B1E;box-shadow:0 24px 80px rgba(0,0,0,0.32);overflow:hidden;">
+            <tr>
+              <td style="padding:34px 32px 10px;">
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td width="56" height="56" align="center" style="border-radius:18px;background:linear-gradient(135deg,#F4E9D1,#D8A84A,#B87333);">
+                      <table role="presentation" cellpadding="0" cellspacing="0" width="30">
+                        <tr><td height="4" style="border-radius:4px;background:#052016;font-size:0;line-height:0;">&nbsp;</td></tr>
+                        <tr><td height="8" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+                        <tr><td height="4" width="22" style="border-radius:4px;background:#052016;opacity:.72;font-size:0;line-height:0;">&nbsp;</td></tr>
+                        <tr><td height="8" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+                        <tr><td height="4" width="26" style="border-radius:4px;background:#052016;opacity:.52;font-size:0;line-height:0;">&nbsp;</td></tr>
+                      </table>
+                    </td>
+                    <td style="padding-left:16px;">
+                      <div style="font-size:24px;line-height:1.1;font-weight:800;letter-spacing:0;color:#F7F1E4;">Queued</div>
+                      <div style="padding-top:4px;font-size:13px;line-height:1.4;font-weight:600;color:rgba(214,240,224,0.62);">Share what's worth watching.</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 8px;">
+                <div style="font-size:11px;line-height:1.4;font-weight:700;letter-spacing:2.6px;text-transform:uppercase;color:#D8A84A;">Magic link</div>
+                <h1 style="margin:10px 0 0;font-size:34px;line-height:1.05;font-weight:800;letter-spacing:0;color:#F7F1E4;">Jump back into your queue.</h1>
+                <p style="margin:16px 0 0;font-size:16px;line-height:1.65;font-weight:500;color:rgba(214,240,224,0.72);">Use this secure one-time link to sign in to Queued. New here? This same link will create your account and get you started.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 6px;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;border-radius:999px;background:#F4E9D1;color:#052016;text-decoration:none;font-size:15px;line-height:1;font-weight:800;padding:16px 24px;box-shadow:0 14px 32px rgba(216,168,74,0.24);">Open Queued</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 32px 30px;">
+                <p style="margin:0;font-size:13px;line-height:1.65;color:rgba(214,240,224,0.56);">This link is one-time use and expires soon. If you did not request it, no action is needed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="border-top:1px solid rgba(150,214,180,0.14);background:rgba(2,17,12,0.42);padding:18px 32px;">
+                <p style="margin:0;font-size:12px;line-height:1.6;color:rgba(214,240,224,0.42);">Button not working? Paste this link into your browser:<br><span style="color:rgba(247,241,228,0.62);word-break:break-all;">{{ .ConfirmationURL }}</span></p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
