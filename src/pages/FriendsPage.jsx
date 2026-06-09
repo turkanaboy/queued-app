@@ -91,7 +91,18 @@ export default function FriendsPage() {
     try {
       const token = await getOrCreateInviteToken(session.user.id)
       const link = buildInviteLink(token)
-      await navigator.clipboard.writeText(link)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link)
+      } else {
+        const el = document.createElement('textarea')
+        el.value = link
+        el.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+        document.body.appendChild(el)
+        el.focus()
+        el.select()
+        document.execCommand('copy')
+        document.body.removeChild(el)
+      }
       setInviteStatus('Copied')
     } catch {
       setInviteStatus('Copy failed')
