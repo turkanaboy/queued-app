@@ -91,9 +91,9 @@ export default function FriendsPage() {
     try {
       const token = await getOrCreateInviteToken(session.user.id)
       const link = buildInviteLink(token)
-      if (navigator.clipboard?.writeText) {
+      try {
         await navigator.clipboard.writeText(link)
-      } else {
+      } catch {
         const el = document.createElement('textarea')
         el.value = link
         el.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
