@@ -6,12 +6,15 @@ import RatingModal from '../components/RatingModal'
 import { ProviderRows } from './AddRecommendationPage'
 import { EmptyState, MEDIA, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader } from '../lib/queuedDesign'
 
+const FRIENDS_QUEUE_TIMEOUT_MS = 4000
+
 export default function QueuedUpPage() {
   const { session } = useAuth()
   const [items, setItems] = useState([])
   const [medium, setMedium] = useState('movie')
   const [loading, setLoading] = useState(true)
   const [ratingItem, setRatingItem] = useState(null)
+  const [friendsQueueMap, setFriendsQueueMap] = useState({})
 
   async function fetchQueue() {
     setLoading(true)
@@ -21,8 +24,72 @@ export default function QueuedUpPage() {
       .eq('user_id', session.user.id)
       .eq('status', 'queued')
       .order('created_at', { ascending: true })
-    setItems(data ?? [])
+    const queueItems = data ?? []
+    setItems(queueItems)
     setLoading(false)
+    fetchFriendsQueue(session.user.id, queueItems)
+  }
+
+  async function fetchFriendsQueue(uid, queueItems) {
+    if (queueItems.length === 0) return
+
+    const myMediaIds = queueItems.map(i => i.media_id).filter(Boolean)
+    if (myMediaIds.length === 0) return
+
+    const work = (async () => {
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('user_a_id, user_b_id, user_a:users!friendships_user_a_id_fkey(id,display_name,username), user_b:users!friendships_user_b_id_fkey(id,display_name,username)')
+        .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
+        .eq('status', 'accepted')
+
+      if (!friendships?.length) return
+
+      const friendMap = {}
+      for (const f of friendships) {
+        const friend = f.user_a_id === uid ? f.user_b : f.user_a
+        if (friend?.id) friendMap[friend.id] = friend
+      }
+      const friendIds = Object.keys(friendMap)
+      if (!friendIds.length) return
+
+      const [{ data: friendQueues }, { data: existingRecs }] = await Promise.all([
+        supabase
+          .from('user_media_log')
+          .select('user_id, media_id')
+          .in('user_id', friendIds)
+          .in('media_id', myMediaIds)
+          .eq('status', 'queued'),
+        supabase
+          .from('recommendations')
+          .select('sender_id, recipient_id, media_id')
+          .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
+          .in('media_id', myMediaIds)
+          .is('deleted_at', null),
+      ])
+
+      const recPairs = new Set(
+        (existingRecs ?? []).map(r => {
+          const friendId = r.sender_id === uid ? r.recipient_id : r.sender_id
+          return `${friendId}:${r.media_id}`
+        })
+      )
+
+      const map = {}
+      for (const entry of (friendQueues ?? [])) {
+        if (recPairs.has(`${entry.user_id}:${entry.media_id}`)) continue
+        const friend = friendMap[entry.user_id]
+        if (!friend) continue
+        if (!map[entry.media_id]) map[entry.media_id] = []
+        map[entry.media_id].push(friend)
+      }
+
+      return map
+    })()
+
+    const timeout = new Promise(resolve => setTimeout(() => resolve(null), FRIENDS_QUEUE_TIMEOUT_MS))
+    const result = await Promise.race([work, timeout])
+    if (result) setFriendsQueueMap(result)
   }
 
   useEffect(() => {
@@ -64,6 +131,7 @@ export default function QueuedUpPage() {
                       <p className="text-[10.5px] font-semibold text-[rgba(214,240,224,0.35)]">Streaming info unavailable</p>
                     )}
                   </div>
+                  <AlsoQueuedBy friends={friendsQueueMap[item.media_id]} />
                 </div>
                 <button onClick={() => setRatingItem(item)} className="btn-press rounded-full border border-[#D8A84A]/40 px-3 py-1.5 text-xs font-bold text-[#D8A84A]">Finish</button>
               </div>
@@ -84,6 +152,21 @@ export default function QueuedUpPage() {
         />
       )}
     </div>
+  )
+}
+
+function AlsoQueuedBy({ friends }) {
+  if (!friends?.length) return null
+  const [first, second, ...rest] = friends
+  const firstName = first.display_name || first.username
+  let label
+  if (friends.length === 1) label = `${firstName} also has this queued`
+  else if (friends.length === 2) label = `${firstName} & ${second.display_name || second.username} also have this queued`
+  else label = `${firstName} & ${friends.length - 1} others also have this queued`
+  return (
+    <p className="mt-1.5 text-[10.5px] font-semibold text-[rgba(45,212,143,0.55)]">
+      ◎ {label}
+    </p>
   )
 }
 
