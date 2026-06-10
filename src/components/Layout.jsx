@@ -31,6 +31,10 @@ export default function Layout() {
             <ListIcon />
           </TabItem>
 
+          <TabItem to="/parties" label="Parties">
+            <PartiesIcon />
+          </TabItem>
+
           <button
             type="button"
             onClick={() => setShowRecommendSheet(true)}
@@ -120,6 +124,17 @@ function ProfileIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2"/>
       <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function PartiesIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="2"/>
+      <path d="M2 19c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M17 14c1.7.4 3 1.9 3 3.7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
     </svg>
   )
 }

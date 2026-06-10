@@ -12,6 +12,9 @@ import QueuedUpPage from './pages/QueuedUpPage'
 import TriviaChallengePage from './pages/TriviaChallengePage'
 import Layout from './components/Layout'
 import { acceptStoredInvite, getInviteFromUrl, getStoredInvite, rememberInvite } from './lib/invites'
+import { clearStoredPartyInvite, getPartyInviteFromUrl, getStoredPartyInvite, joinParty, rememberPartyInvite } from './lib/parties'
+import PartiesPage from './pages/PartiesPage'
+import PartyDetailPage from './pages/PartyDetailPage'
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth()
@@ -32,10 +35,13 @@ function InviteHandler() {
   const location = useLocation()
   const navigate = useNavigate()
   const acceptingRef = useRef(false)
+  const joiningPartyRef = useRef(false)
 
   useEffect(() => {
     const invite = getInviteFromUrl(location.search)
     if (invite) rememberInvite(invite)
+    const partyInvite = getPartyInviteFromUrl(location.search)
+    if (partyInvite) rememberPartyInvite(partyInvite)
   }, [location.search])
 
   useEffect(() => {
@@ -49,6 +55,22 @@ function InviteHandler() {
       .catch(() => {})
       .finally(() => { acceptingRef.current = false })
   }, [loading, session, profile, location.pathname, navigate])
+
+  useEffect(() => {
+    if (loading || joiningPartyRef.current || !session || !profile?.username || !getStoredPartyInvite()) return
+
+    joiningPartyRef.current = true
+    const token = getStoredPartyInvite()
+    clearStoredPartyInvite()
+    joinParty(token)
+      .then(partyId => {
+        navigate(`/parties/${partyId}`, { replace: true })
+      })
+      .catch(() => {
+        navigate('/parties', { replace: true })
+      })
+      .finally(() => { joiningPartyRef.current = false })
+  }, [loading, session, profile, navigate])
 
   return null
 }
@@ -81,6 +103,8 @@ function AppRoutes() {
           <Route path="/collection" element={<CollectionPage />} />
           <Route path="/profile/:userId?" element={<ProfilePage />} />
           <Route path="/trivia/:challengeId" element={<TriviaChallengePage />} />
+          <Route path="/parties" element={<PartiesPage />} />
+          <Route path="/parties/:partyId" element={<PartyDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
