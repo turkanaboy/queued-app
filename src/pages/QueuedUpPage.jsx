@@ -33,8 +33,13 @@ export default function QueuedUpPage() {
   async function fetchFriendsQueue(uid, queueItems) {
     if (queueItems.length === 0) return
 
-    const myMediaIds = queueItems.map(i => i.media_id).filter(Boolean)
-    if (myMediaIds.length === 0) return
+    const myTitles = queueItems.map(i => i.media_title).filter(Boolean)
+    if (myTitles.length === 0) return
+
+    // Key by "title:type" so we can match across users regardless of media_id
+    const titleKeyToItemId = Object.fromEntries(
+      queueItems.map(i => [`${i.media_title}:${i.media_type}`, i.id])
+    )
 
     const work = (async () => {
       const { data: friendships } = await supabase
@@ -56,32 +61,35 @@ export default function QueuedUpPage() {
       const [{ data: friendQueues }, { data: existingRecs }] = await Promise.all([
         supabase
           .from('user_media_log')
-          .select('user_id, media_id')
+          .select('user_id, media_title, media_type')
           .in('user_id', friendIds)
-          .in('media_id', myMediaIds)
+          .in('media_title', myTitles)
           .eq('status', 'queued'),
         supabase
           .from('recommendations')
-          .select('sender_id, recipient_id, media_id')
+          .select('sender_id, recipient_id, media_title, media_type')
           .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
-          .in('media_id', myMediaIds)
+          .in('media_title', myTitles)
           .is('deleted_at', null),
       ])
 
       const recPairs = new Set(
         (existingRecs ?? []).map(r => {
           const friendId = r.sender_id === uid ? r.recipient_id : r.sender_id
-          return `${friendId}:${r.media_id}`
+          return `${friendId}:${r.media_title}:${r.media_type}`
         })
       )
 
       const map = {}
       for (const entry of (friendQueues ?? [])) {
-        if (recPairs.has(`${entry.user_id}:${entry.media_id}`)) continue
+        const titleKey = `${entry.media_title}:${entry.media_type}`
+        if (recPairs.has(`${entry.user_id}:${titleKey}`)) continue
         const friend = friendMap[entry.user_id]
         if (!friend) continue
-        if (!map[entry.media_id]) map[entry.media_id] = []
-        map[entry.media_id].push(friend)
+        const itemId = titleKeyToItemId[titleKey]
+        if (!itemId) continue
+        if (!map[itemId]) map[itemId] = []
+        map[itemId].push(friend)
       }
 
       return map
@@ -131,7 +139,7 @@ export default function QueuedUpPage() {
                       <p className="text-[10.5px] font-semibold text-[rgba(214,240,224,0.35)]">Streaming info unavailable</p>
                     )}
                   </div>
-                  <AlsoQueuedBy friends={friendsQueueMap[item.media_id]} />
+                  <AlsoQueuedBy friends={friendsQueueMap[item.id]} />
                 </div>
                 <button onClick={() => setRatingItem(item)} className="btn-press rounded-full border border-[#D8A84A]/40 px-3 py-1.5 text-xs font-bold text-[#D8A84A]">Finish</button>
               </div>
