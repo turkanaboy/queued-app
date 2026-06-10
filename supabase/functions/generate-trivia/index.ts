@@ -59,6 +59,16 @@ async function callClaude(systemPrompt: string, userMessage: string): Promise<st
   return data.content?.[0]?.text ?? ''
 }
 
+// ── Shared helpers ────────────────────────────────────────────
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 // ── Generate Q1–Q10 multiple-choice questions via Claude ──────
 interface MediaItem {
   title: string
@@ -127,6 +137,15 @@ Rules:
     questions = parseResponse(text)
   }
   if (!questions) throw new Error('Claude failed to return valid MCQ JSON after 2 attempts')
+
+  // Shuffle options to remove LLM positional bias (Claude tends to put correct answer first)
+  for (const q of questions) {
+    const correctAnswer = q.options[q.correct_index]
+    const shuffled = shuffleArray([...q.options]) as [string, string, string, string]
+    q.options = shuffled
+    q.correct_index = shuffled.indexOf(correctAnswer) as 0 | 1 | 2 | 3
+  }
+
   return questions
 }
 
@@ -227,15 +246,6 @@ async function fetchOTDBQuestions(count: number): Promise<MultipleChoiceQuestion
 }
 
 // ── Media pool builder ────────────────────────────────────────
-function shuffleArray<T>(arr: T[]): T[] {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
 interface LogEntry {
   media_id: string
   media_title: string
