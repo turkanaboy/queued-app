@@ -31,10 +31,6 @@ export default function Layout() {
             <ListIcon />
           </TabItem>
 
-          <TabItem to="/parties" label="Parties">
-            <PartiesIcon />
-          </TabItem>
-
           <button
             type="button"
             onClick={() => setShowRecommendSheet(true)}

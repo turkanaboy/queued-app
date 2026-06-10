@@ -114,6 +114,24 @@ export default function FriendsPage() {
     <div className="pb-5">
       <ScreenHeader title="Friends" subtitle="Find people and see their recommendations" />
       <div className="space-y-5 px-[18px]">
+        <button
+          type="button"
+          onClick={() => navigate('/parties')}
+          className="btn-press w-full rounded-[18px] border border-[rgba(45,212,143,0.22)] bg-[linear-gradient(135deg,rgba(45,212,143,0.12),rgba(216,168,74,0.06))] p-4 text-left shadow-[inset_3px_0_0_rgba(45,212,143,0.38)]"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-[#F7F1E4]">Parties</p>
+              <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.58)]">
+                Shared lists for watching together.
+              </p>
+            </div>
+            <svg className="shrink-0 text-[rgba(214,240,224,0.4)]" width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </button>
+
         <section className="rounded-[18px] border border-[rgba(216,168,74,0.26)] bg-[linear-gradient(135deg,rgba(216,168,74,0.16),rgba(45,212,143,0.08))] p-4 shadow-[inset_3px_0_0_rgba(216,168,74,0.48)]">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
