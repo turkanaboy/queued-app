@@ -38,7 +38,7 @@ export default function PartiesPage() {
     setCreating(true)
     setCreateError('')
     try {
-      const party = await createParty(name, uid)
+      const party = await createParty(name)
       navigate(`/parties/${party.id}`)
     } catch (err) {
       setCreateError(err.message ?? 'Could not create party')

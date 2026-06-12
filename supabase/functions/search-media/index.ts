@@ -521,7 +521,7 @@ serve(async (req) => {
     const people = (peopleData.results ?? []).slice(0, 3)
     personNameMatched = people.some((person: any) => {
       const name = normalizeText(person.name)
-      return name.includes(normalizedQuery) || normalizedQuery.includes(name)
+      return name.includes(normalizedQuery) || name === normalizedQuery
     })
     const knownFor = people
       .flatMap((person: any) => person.known_for ?? [])

@@ -32,12 +32,10 @@ export function clearStoredPartyInvite() {
 
 // ── Party CRUD ────────────────────────────────────────────────
 
-export async function createParty(name, creatorId) {
-  const { data, error } = await supabase
-    .from('parties')
-    .insert({ name, creator_id: creatorId })
-    .select('*')
-    .single()
+export async function createParty(name) {
+  const { data: partyId, error: rpcError } = await supabase.rpc('create_party', { p_name: name })
+  if (rpcError) throw rpcError
+  const { data, error } = await supabase.from('parties').select('*').eq('id', partyId).single()
   if (error) throw error
   return data
 }
