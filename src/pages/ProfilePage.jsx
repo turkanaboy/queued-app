@@ -10,7 +10,7 @@ import { displayRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
-import { RecommendationSheet } from './AddRecommendationPage'
+import { ProviderRows, RecommendationSheet } from './AddRecommendationPage'
 import { fetchMyChallenges } from '../lib/trivia'
 import {
   ACTIVE_STATUSES,
@@ -492,6 +492,7 @@ export default function ProfilePage() {
               key={`${item.item_kind}-${item.id}`}
               item={item}
               own={isOwnProfile}
+              myPlatforms={profile?.platforms ?? []}
               first={index === 0}
               onOpen={() => isOwnProfile && item.item_kind !== 'sent' && setEditingLogItem(item)}
               onStatus={status => item.item_kind === 'recommendation' ? updateRecommendationStatus(item, status) : updateLogStatus(item, status)}
@@ -639,9 +640,9 @@ function BotStrip({ loading, active, result, onAsk, onDismiss, onStatusChange })
   )
 }
 
-function QueueRow({ item, own, first, onOpen, onStatus, onDelete }) {
+function QueueRow({ item, own, myPlatforms, first, onOpen, onStatus, onDelete }) {
   return (
-    <div className={`flex items-center gap-3 px-[13px] py-[11px] ${first ? '' : 'border-t border-[rgba(150,214,180,0.12)]'}`}>
+    <div className={`flex items-start gap-3 px-[13px] py-[11px] ${first ? '' : 'border-t border-[rgba(150,214,180,0.12)]'}`}>
       <button onClick={onOpen} className="btn-press"><PosterTile item={item} w={34} h={52} radius={8} /></button>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-[#F7F1E4]">{item.media_title} {item.rating && <span className="font-mono-q text-[11px] text-[#D8A84A]">★ {displayRating(item.rating)}</span>}</p>
@@ -650,11 +651,23 @@ function QueueRow({ item, own, first, onOpen, onStatus, onDelete }) {
           <span> · {item.origin}</span>
           {item.origin_type === 'bot' && <span className="text-[#C96B4B]"> · Bot</span>}
         </p>
+        <div className="mt-2">
+          <ProviderRows providers={item.streaming_providers} title={item.media_title} creator={item.media_creator} mediaType={item.media_type} compact myPlatforms={myPlatforms} />
+          {['movie', 'tv'].includes(item.media_type) && !hasStreamingInfo(item.streaming_providers) && (
+            <p className="text-[10.5px] font-semibold text-[rgba(214,240,224,0.35)]">Streaming info unavailable</p>
+          )}
+        </div>
         {own && item.item_kind === 'log' && <button onClick={onDelete} className="btn-press mt-2 inline-flex rounded-full border border-[#C96B4B]/35 px-2.5 py-1 text-[11px] font-bold text-[#F7F1E4]/70">Remove</button>}
       </div>
       {own && item.item_kind !== 'sent' ? <StatusMenu value={item.status} onChange={onStatus} /> : <span className="font-mono-q text-[10px] text-[rgba(214,240,224,0.5)]">{STATUS[item.status]?.short}</span>}
     </div>
   )
+}
+
+function hasStreamingInfo(providers) {
+  if (!providers) return false
+  if (Array.isArray(providers)) return providers.length > 0
+  return Boolean(providers.flatrate?.length || providers.rent?.length || providers.buy?.length || providers.link)
 }
 
 function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, saving }) {
