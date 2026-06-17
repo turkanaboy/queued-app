@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -8,9 +9,11 @@ import {
   buildPartyInviteLink,
   castVote,
   getCurrentPicker,
-  getMyQueueItems,
+  getMyLogItems,
   getOverlapSuggestions,
   getParty,
+  getPartyInviteCandidates,
+  inviteFriendToParty,
   pickItem,
 } from '../lib/parties'
 
@@ -24,9 +27,13 @@ export default function PartyDetailPage() {
   const [pickingId, setPickingId] = useState(null)
   const [votingId, setVotingId] = useState(null)
   const [shareStatus, setShareStatus] = useState('')
+  const [showInviteFriends, setShowInviteFriends] = useState(false)
+  const [inviteCandidates, setInviteCandidates] = useState([])
+  const [invitingId, setInvitingId] = useState(null)
+  const [inviteError, setInviteError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [addTab, setAddTab] = useState('queue')
-  const [queueItems, setQueueItems] = useState([])
+  const [logItems, setLogItems] = useState([])
   const [overlapItems, setOverlapItems] = useState([])
   const [addingId, setAddingId] = useState(null)
   const [addError, setAddError] = useState('')
@@ -58,13 +65,41 @@ export default function PartyDetailPage() {
   async function fetchAddItems() {
     try {
       const [q, o] = await Promise.all([
-        getMyQueueItems(partyId, uid),
+        getMyLogItems(partyId, uid),
         getOverlapSuggestions(partyId),
       ])
-      setQueueItems(q)
+      setLogItems(q)
       setOverlapItems(o)
     } catch {
       // silently empty
+    }
+  }
+
+  async function handleToggleInviteFriends() {
+    const next = !showInviteFriends
+    setShowInviteFriends(next)
+    setInviteError('')
+    if (!next) return
+    try {
+      const candidates = await getPartyInviteCandidates(partyId, uid)
+      setInviteCandidates(candidates)
+    } catch (err) {
+      setInviteError(err.message ?? 'Could not load friends')
+    }
+  }
+
+  async function handleInviteFriend(friendId) {
+    setInvitingId(friendId)
+    setInviteError('')
+    try {
+      await inviteFriendToParty(partyId, friendId)
+      await fetchParty()
+      const candidates = await getPartyInviteCandidates(partyId, uid)
+      setInviteCandidates(candidates)
+    } catch (err) {
+      setInviteError(err.message ?? 'Could not add friend')
+    } finally {
+      setInvitingId(null)
     }
   }
 
@@ -191,14 +226,45 @@ export default function PartyDetailPage() {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleShareInvite}
-            className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-4 py-2 text-xs font-extrabold text-[#052016]"
-          >
-            {shareStatus || 'Share invite'}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handleToggleInviteFriends}
+              className="btn-press rounded-full border border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.6)] px-3 py-2 text-xs font-bold text-[rgba(214,240,224,0.78)]"
+            >
+              Friends
+            </button>
+            <button
+              type="button"
+              onClick={handleShareInvite}
+              className="btn-press rounded-full bg-[#F4E9D1] px-4 py-2 text-xs font-extrabold text-[#052016]"
+            >
+              {shareStatus || 'Share invite'}
+            </button>
+          </div>
         </div>
+
+        {showInviteFriends && (
+          <section className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)]">
+            <div className="border-b border-[rgba(150,214,180,0.12)] px-4 py-3">
+              <p className="text-sm font-bold text-[#F7F1E4]">Invite friends</p>
+              <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.45)]">Add accepted friends directly to this party.</p>
+            </div>
+            {inviteError && <p className="px-4 pt-3 text-xs text-rose-300">{inviteError}</p>}
+            {inviteCandidates.length === 0 ? (
+              <p className="px-4 py-5 text-sm text-[rgba(214,240,224,0.4)]">No friends left to add.</p>
+            ) : (
+              inviteCandidates.map(friend => (
+                <FriendInviteRow
+                  key={friend.id}
+                  friend={friend}
+                  inviting={invitingId === friend.id}
+                  onInvite={() => handleInviteFriend(friend.id)}
+                />
+              ))
+            )}
+          </section>
+        )}
 
         {/* Rotation badge */}
         {members.length > 1 && (
@@ -280,7 +346,7 @@ export default function PartyDetailPage() {
             </div>
 
             <div className="flex border-b border-[rgba(150,214,180,0.12)]">
-              {[['queue', 'My queue'], ['overlap', 'Everyone wants']].map(([key, label]) => (
+              {[['queue', 'My log'], ['overlap', 'Member overlap']].map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
@@ -298,10 +364,10 @@ export default function PartyDetailPage() {
 
             <div className="max-h-64 overflow-y-auto">
               {addTab === 'queue' ? (
-                queueItems.length === 0 ? (
-                  <p className="px-4 py-5 text-sm text-[rgba(214,240,224,0.4)]">Nothing in your queue that isn't already on the list.</p>
+                logItems.length === 0 ? (
+                  <p className="px-4 py-5 text-sm text-[rgba(214,240,224,0.4)]">Nothing in your log that isn't already on the list.</p>
                 ) : (
-                  queueItems.map(item => (
+                  logItems.map(item => (
                     <AddItem
                       key={`${item.media_type}:${item.media_id}`}
                       item={item}
@@ -312,7 +378,7 @@ export default function PartyDetailPage() {
                 )
               ) : (
                 overlapItems.length === 0 ? (
-                  <p className="px-4 py-5 text-sm text-[rgba(214,240,224,0.4)]">No overlap found yet — more members need items in their queue.</p>
+                  <p className="px-4 py-5 text-sm text-[rgba(214,240,224,0.4)]">No overlap found yet.</p>
                 ) : (
                   overlapItems.map(item => (
                     <AddItem
@@ -320,7 +386,7 @@ export default function PartyDetailPage() {
                       item={item}
                       addingId={addingId}
                       onAdd={handleAdd}
-                      badge={`${item.member_count} members want this`}
+                      badge={`${item.member_count} members logged this`}
                     />
                   ))
                 )
@@ -520,6 +586,28 @@ function AddItem({ item, addingId, onAdd, badge }) {
         className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-3 py-1.5 text-xs font-extrabold text-[#052016] disabled:opacity-50"
       >
         {isAdding ? '…' : 'Add'}
+      </button>
+    </div>
+  )
+}
+
+function FriendInviteRow({ friend, inviting, onInvite }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-[rgba(150,214,180,0.1)] px-4 py-3 first:border-t-0">
+      <div className="flex min-w-0 items-center gap-3">
+        <InitialsAvatar name={friend.display_name || friend.username} size="sm" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-[#F7F1E4]">{friend.display_name || friend.username}</p>
+          <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">@{friend.username}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        disabled={inviting}
+        onClick={onInvite}
+        className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-3 py-1.5 text-xs font-extrabold text-[#052016] disabled:opacity-50"
+      >
+        {inviting ? 'Adding...' : 'Add'}
       </button>
     </div>
   )

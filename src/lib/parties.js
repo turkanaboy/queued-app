@@ -121,9 +121,40 @@ export async function joinParty(inviteToken) {
   return data
 }
 
+export async function inviteFriendToParty(partyId, friendId) {
+  const { error } = await supabase.rpc('invite_friend_to_party', {
+    p_party_id: partyId,
+    p_friend_id: friendId,
+  })
+  if (error) throw error
+}
+
+export async function getPartyInviteCandidates(partyId, userId) {
+  const { data: members, error: membersError } = await supabase
+    .from('party_members')
+    .select('user_id')
+    .eq('party_id', partyId)
+
+  if (membersError) throw membersError
+  const memberIds = new Set((members ?? []).map(m => m.user_id))
+
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('*, user_a:users!friendships_user_a_id_fkey(id, username, display_name), user_b:users!friendships_user_b_id_fkey(id, username, display_name)')
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+    .eq('status', 'accepted')
+
+  if (error) throw error
+
+  return (data ?? [])
+    .map(f => (f.user_a_id === userId ? f.user_b : f.user_a))
+    .filter(friend => friend && !memberIds.has(friend.id))
+    .sort((a, b) => (a.display_name || a.username || '').localeCompare(b.display_name || b.username || ''))
+}
+
 // ── Queue & overlap ───────────────────────────────────────────
 
-export async function getMyQueueItems(partyId, userId) {
+export async function getMyLogItems(partyId, userId) {
   // Fetch already-listed media IDs to exclude
   const { data: listed } = await supabase
     .from('party_list_items')
@@ -134,15 +165,16 @@ export async function getMyQueueItems(partyId, userId) {
 
   const { data, error } = await supabase
     .from('user_media_log')
-    .select('media_type, media_id, media_title, media_creator, media_poster_url')
+    .select('media_type, media_id, media_title, media_creator, media_poster_url, status, created_at')
     .eq('user_id', userId)
-    .eq('status', 'queued')
     .order('created_at', { ascending: false })
 
   if (error) throw error
 
   return (data ?? []).filter(i => !listedKeys.has(`${i.media_type}:${i.media_id}`))
 }
+
+export const getMyQueueItems = getMyLogItems
 
 export async function getOverlapSuggestions(partyId) {
   // Fetch all party members
@@ -169,7 +201,6 @@ export async function getOverlapSuggestions(partyId) {
     .from('user_media_log')
     .select('user_id, media_type, media_id, media_title, media_creator, media_poster_url')
     .in('user_id', memberIds)
-    .eq('status', 'queued')
 
   if (queueError) throw queueError
 
