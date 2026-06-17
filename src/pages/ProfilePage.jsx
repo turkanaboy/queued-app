@@ -303,26 +303,27 @@ export default function ProfilePage() {
           streaming_providers: rec.streaming_providers ?? [],
         }
       }),
-      ...sentRecommendations.map(rec => ({
-        id: `sent-${rec.id}`,
-        recommendation_id: rec.id,
-        item_kind: 'sent',
-        media_type: rec.media_type,
-        media_id: rec.media_id,
-        media_title: rec.media_title,
-        media_creator: rec.media_creator,
-        media_poster_url: rec.media_poster_url,
-        rating: rec.rating ?? null,
-        status: rec.recipient_status,
-        created_at: rec.created_at,
-        origin: `Sent to ${rec.recipient?.display_name || rec.recipient?.username || 'friend'}`,
-        origin_type: 'sent',
-        origin_user_id: rec.recipient_id,
-      })),
+      ...sentRecommendations
+        .filter(rec => !logByMediaId.has(mediaKey(rec)))
+        .map(rec => ({
+          id: `sent-${rec.id}`,
+          recommendation_id: rec.id,
+          item_kind: 'sent',
+          media_type: rec.media_type,
+          media_id: rec.media_id,
+          media_title: rec.media_title,
+          media_creator: rec.media_creator,
+          media_poster_url: rec.media_poster_url,
+          rating: rec.rating ?? null,
+          status: rec.recipient_status,
+          created_at: rec.created_at,
+          origin: `Sent to ${rec.recipient?.display_name || rec.recipient?.username || 'friend'}`,
+          origin_type: 'sent',
+          origin_user_id: rec.recipient_id,
+        })),
       ...mediaLog
         .filter(item =>
-          !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item)) &&
-          !sentRecommendations.some(rec => mediaKey(rec) === mediaKey(item))
+          !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item))
         )
         .map(item => ({
           ...item,
@@ -330,8 +331,10 @@ export default function ProfilePage() {
           status: item.status ?? (item.rating ? 'finished' : 'queued'),
           origin: item.source_type === 'recommendation' && item.source_user
             ? (item.source_user.display_name || item.source_user.username)
-            : 'Self',
-          origin_type: item.source_type === 'recommendation' ? 'recommendation' : 'self',
+            : item.source_type === 'party'
+              ? 'Movie night'
+              : 'Self',
+          origin_type: item.source_type === 'recommendation' ? 'recommendation' : item.source_type === 'party' ? 'party' : 'self',
           origin_user_id: item.source_user_id,
         })),
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
