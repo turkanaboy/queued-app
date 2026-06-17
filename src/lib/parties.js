@@ -113,6 +113,11 @@ export async function pickItem(itemId) {
   if (error) throw error
 }
 
+export async function finishPickedItem(itemId) {
+  const { error } = await supabase.rpc('finish_party_item', { p_item_id: itemId })
+  if (error) throw error
+}
+
 // ── Join ──────────────────────────────────────────────────────
 
 export async function joinParty(inviteToken) {

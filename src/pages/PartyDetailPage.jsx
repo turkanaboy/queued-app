@@ -8,6 +8,7 @@ import {
   addToPartyList,
   buildPartyInviteLink,
   castVote,
+  finishPickedItem,
   getCurrentPicker,
   getMyLogItems,
   getOverlapSuggestions,
@@ -25,6 +26,7 @@ export default function PartyDetailPage() {
   const [party, setParty] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pickingId, setPickingId] = useState(null)
+  const [finishingId, setFinishingId] = useState(null)
   const [votingId, setVotingId] = useState(null)
   const [shareStatus, setShareStatus] = useState('')
   const [showInviteFriends, setShowInviteFriends] = useState(false)
@@ -159,6 +161,19 @@ export default function PartyDetailPage() {
     }
   }
 
+  async function handleFinish(itemId) {
+    setFinishingId(itemId)
+    setPickError('')
+    try {
+      await finishPickedItem(itemId)
+      await fetchParty()
+    } catch (err) {
+      setPickError(err.message ?? 'Could not mark finished')
+    } finally {
+      setFinishingId(null)
+    }
+  }
+
   async function handleShareInvite() {
     if (!party?.invite_token) return
     setShareStatus('Copying…')
@@ -196,10 +211,13 @@ export default function PartyDetailPage() {
   const members = party.party_members ?? []
   const allItems = party.party_list_items ?? []
   const unwatched = allItems.filter(i => i.status === 'unwatched').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  const picked = allItems.filter(i => i.status === 'picked').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const watched = allItems.filter(i => i.status === 'watched').sort((a, b) => new Date(b.watched_at) - new Date(a.watched_at))
-  const isLeader = false
   const currentPicker = getCurrentPicker(members, watched.length)
   const isMyTurn = currentPicker?.user_id === uid
+  const activePick = picked[0] ?? null
+  const activePicker = activePick ? members.find(m => m.user_id === activePick.picked_by) : null
+  const canFinishActivePick = activePick?.picked_by === uid
 
   return (
     <div className="pb-5">
@@ -267,7 +285,7 @@ export default function PartyDetailPage() {
         )}
 
         {/* Rotation badge */}
-        {members.length > 1 && (
+        {members.length > 1 && !activePick && (
           <div className="rounded-[14px] border border-[rgba(216,168,74,0.2)] bg-[rgba(216,168,74,0.08)] px-4 py-2.5">
             {isMyTurn ? (
               <p className="text-sm font-bold text-[#D8A84A]">Your pick — choose something from the list below</p>
@@ -280,6 +298,16 @@ export default function PartyDetailPage() {
               </p>
             )}
           </div>
+        )}
+
+        {activePick && (
+          <WinnerCard
+            item={activePick}
+            pickerName={activePicker?.user?.display_name || activePicker?.user?.username || 'Someone'}
+            canFinish={canFinishActivePick}
+            finishing={finishingId === activePick.id}
+            onFinish={() => handleFinish(activePick.id)}
+          />
         )}
 
         {/* Pick error */}
@@ -319,8 +347,7 @@ export default function PartyDetailPage() {
                   item={item}
                   members={members}
                   uid={uid}
-                  isLeader={isLeader}
-                  isMyTurn={isMyTurn}
+                  canPick={isMyTurn && !activePick}
                   pickingId={pickingId}
                   votingId={votingId}
                   onVote={handleVote}
@@ -448,7 +475,7 @@ export default function PartyDetailPage() {
   )
 }
 
-function PartyListItem({ item, members, uid, isLeader, isMyTurn, pickingId, votingId, onVote, onPick }) {
+function PartyListItem({ item, members, uid, canPick, pickingId, votingId, onVote, onPick }) {
   const votes = item.party_votes ?? []
   const upvotes = votes.filter(v => v.vote === true)
   const myVote = votes.find(v => v.user_id === uid)
@@ -528,7 +555,7 @@ function PartyListItem({ item, members, uid, isLeader, isMyTurn, pickingId, voti
 
         {/* Pick buttons */}
         <div className="flex items-center gap-2">
-          {isMyTurn && majorityReached && (
+          {canPick && majorityReached && (
             <button
               type="button"
               disabled={isPicking}
@@ -538,7 +565,7 @@ function PartyListItem({ item, members, uid, isLeader, isMyTurn, pickingId, voti
               {isPicking ? '…' : 'Pick this'}
             </button>
           )}
-          {isMyTurn && !majorityReached && (
+          {canPick && !majorityReached && (
             <button
               type="button"
               disabled={isPicking}
@@ -548,19 +575,45 @@ function PartyListItem({ item, members, uid, isLeader, isMyTurn, pickingId, voti
               {isPicking ? '…' : 'My pick'}
             </button>
           )}
-          {isLeader && !majorityReached && !isMyTurn && (
-            <button
-              type="button"
-              disabled={isPicking}
-              onClick={() => onPick(item.id)}
-              className="btn-press rounded-full border border-[rgba(150,214,180,0.2)] px-4 py-1.5 text-xs font-bold text-[rgba(214,240,224,0.5)] disabled:opacity-50"
-            >
-              {isPicking ? '…' : 'Call it'}
-            </button>
-          )}
         </div>
       </div>
     </div>
+  )
+}
+
+function WinnerCard({ item, pickerName, canFinish, finishing, onFinish }) {
+  return (
+    <section className="overflow-hidden rounded-[18px] border border-[rgba(216,168,74,0.32)] bg-[rgba(216,168,74,0.1)]">
+      <div className="border-b border-[rgba(216,168,74,0.16)] px-4 py-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-[#D8A84A]">Winner</p>
+      </div>
+      <div className="flex items-center gap-3 px-4 py-4">
+        {item.media_poster_url ? (
+          <img src={item.media_poster_url} alt="" className="h-16 w-11 shrink-0 rounded object-cover" />
+        ) : (
+          <div className="h-16 w-11 shrink-0 rounded bg-[rgba(150,214,180,0.1)]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-extrabold text-[#F7F1E4]">{item.media_title}</p>
+          {item.media_creator && <p className="truncate text-xs text-[rgba(214,240,224,0.55)]">{item.media_creator}</p>}
+          <p className="mt-1 text-[11px] text-[rgba(214,240,224,0.45)]">Picked by {pickerName}</p>
+        </div>
+        {canFinish ? (
+          <button
+            type="button"
+            disabled={finishing}
+            onClick={onFinish}
+            className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-4 py-2 text-xs font-extrabold text-[#052016] disabled:opacity-50"
+          >
+            {finishing ? 'Saving...' : 'Finished'}
+          </button>
+        ) : (
+          <span className="shrink-0 rounded-full border border-[rgba(216,168,74,0.24)] px-3 py-1.5 text-xs font-bold text-[#D8A84A]">
+            Picked
+          </span>
+        )}
+      </div>
+    </section>
   )
 }
 
