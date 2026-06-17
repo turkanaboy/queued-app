@@ -197,7 +197,7 @@ export default function PartyDetailPage() {
   const allItems = party.party_list_items ?? []
   const unwatched = allItems.filter(i => i.status === 'unwatched').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const watched = allItems.filter(i => i.status === 'watched').sort((a, b) => new Date(b.watched_at) - new Date(a.watched_at))
-  const isLeader = party.creator_id === uid
+  const isLeader = false
   const currentPicker = getCurrentPicker(members, watched.length)
   const isMyTurn = currentPicker?.user_id === uid
 
@@ -528,7 +528,7 @@ function PartyListItem({ item, members, uid, isLeader, isMyTurn, pickingId, voti
 
         {/* Pick buttons */}
         <div className="flex items-center gap-2">
-          {majorityReached && (
+          {isMyTurn && majorityReached && (
             <button
               type="button"
               disabled={isPicking}
