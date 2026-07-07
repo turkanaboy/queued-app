@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { EmptyState, ScreenHeader, SectionTitle } from '../lib/queuedDesign'
@@ -17,9 +18,7 @@ export default function PartiesPage() {
 
   const uid = session?.user?.id
 
-  useEffect(() => { if (uid) fetchParties() }, [uid])
-
-  async function fetchParties() {
+  const fetchParties = useCallback(async () => {
     setLoading(true)
     try {
       const data = await getUserParties(uid)
@@ -29,7 +28,9 @@ export default function PartiesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [uid])
+
+  useEffect(() => { if (uid) fetchParties() }, [uid, fetchParties])
 
   async function handleCreate(e) {
     e.preventDefault()

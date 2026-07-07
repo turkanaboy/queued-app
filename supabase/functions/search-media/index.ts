@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!
 const TMDB_BASE        = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_W300  = 'https://image.tmdb.org/t/p/w300'
 const TMDB_LOGO_ORIG   = 'https://image.tmdb.org/t/p/original'
@@ -286,6 +288,18 @@ async function getIgdbAccessToken(clientId: string | undefined | null) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
+  // Require a signed-in user. Without this, the anon key alone turned this
+  // function into an open proxy for the TMDB/IGDB/iTunes/OpenLibrary quotas.
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? req.headers.get('apikey')
+  if (!anonKey) return json({ error: 'Supabase anon key not configured' }, 500)
+  const userClient = createClient(SUPABASE_URL, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  })
+  const { data: authData, error: authError } = await userClient.auth.getUser()
+  if (authError || !authData.user) return json({ error: 'unauthorized' }, 401)
+
   const { searchParams } = new URL(req.url)
   const action   = searchParams.get('action') ?? 'search'
   const apiKey   = Deno.env.get('TMDB_API_KEY')
@@ -364,8 +378,9 @@ serve(async (req) => {
     const mediaId   = searchParams.get('media_id')
     const region    = searchParams.get('region') ?? 'US'
     if (!mediaType || !mediaId) return json({ error: 'media_type and media_id are required' }, 400)
+    if (!['movie', 'tv'].includes(mediaType)) return json({ error: 'unsupported media_type' }, 400)
 
-    const res  = await fetch(`${TMDB_BASE}/${mediaType}/${mediaId}/watch/providers?api_key=${apiKey}`)
+    const res  = await fetch(`${TMDB_BASE}/${mediaType}/${encodeURIComponent(mediaId)}/watch/providers?api_key=${apiKey}`)
     const data = await res.json()
     const r    = data.results?.[region] ?? {}
     return json({
@@ -491,7 +506,7 @@ serve(async (req) => {
   }
 
   if (type === 'game') {
-    const escapedQuery = query.replaceAll('"', '\\"')
+    const escapedQuery = query.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
     const games = await igdb('games', [
       `search "${escapedQuery}";`,
       'fields name,summary,first_release_date,total_rating,total_rating_count,cover.image_id,genres.name,involved_companies.developer,involved_companies.company.name;',
@@ -502,6 +517,7 @@ serve(async (req) => {
   }
 
   // Movies / TV via TMDB
+  if (!['multi', 'movie', 'tv'].includes(type)) return json({ error: 'unsupported type' }, 400)
   const endpoint = type === 'multi'
     ? `${TMDB_BASE}/search/multi`
     : `${TMDB_BASE}/search/${type}`

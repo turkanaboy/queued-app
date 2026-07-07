@@ -1,9 +1,9 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import RatingModal from '../components/RatingModal'
-import { ProviderRows } from './AddRecommendationPage'
+import { ProviderRows } from '../components/RecommendationComposer'
 import { EmptyState, MEDIA, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader } from '../lib/queuedDesign'
 
 const FRIENDS_QUEUE_TIMEOUT_MS = 4000
@@ -33,12 +33,13 @@ export default function QueuedUpPage() {
   async function fetchFriendsQueue(uid, queueItems) {
     if (queueItems.length === 0) return
 
-    const myTitles = queueItems.map(i => i.media_title).filter(Boolean)
-    if (myTitles.length === 0) return
+    // Match on media_type:media_id — exact, and unlike media_title it can't
+    // contain commas that would break PostgREST's `.in()` list syntax.
+    const myMediaIds = [...new Set(queueItems.map(i => i.media_id).filter(Boolean))]
+    if (myMediaIds.length === 0) return
 
-    // Key by "title:type" so we can match across users regardless of media_id
-    const titleKeyToItemId = Object.fromEntries(
-      queueItems.map(i => [`${i.media_title}:${i.media_type}`, i.id])
+    const keyToItemId = Object.fromEntries(
+      queueItems.map(i => [`${i.media_type}:${i.media_id}`, i.id])
     )
 
     const work = (async () => {
@@ -61,32 +62,32 @@ export default function QueuedUpPage() {
       const [{ data: friendQueues }, { data: existingRecs }] = await Promise.all([
         supabase
           .from('user_media_log')
-          .select('user_id, media_title, media_type')
+          .select('user_id, media_id, media_type')
           .in('user_id', friendIds)
-          .in('media_title', myTitles)
+          .in('media_id', myMediaIds)
           .eq('status', 'queued'),
         supabase
           .from('recommendations')
-          .select('sender_id, recipient_id, media_title, media_type')
+          .select('sender_id, recipient_id, media_id, media_type')
           .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
-          .in('media_title', myTitles)
+          .in('media_id', myMediaIds)
           .is('deleted_at', null),
       ])
 
       const recPairs = new Set(
         (existingRecs ?? []).map(r => {
           const friendId = r.sender_id === uid ? r.recipient_id : r.sender_id
-          return `${friendId}:${r.media_title}:${r.media_type}`
+          return `${friendId}:${r.media_type}:${r.media_id}`
         })
       )
 
       const map = {}
       for (const entry of (friendQueues ?? [])) {
-        const titleKey = `${entry.media_title}:${entry.media_type}`
-        if (recPairs.has(`${entry.user_id}:${titleKey}`)) continue
+        const key = `${entry.media_type}:${entry.media_id}`
+        if (recPairs.has(`${entry.user_id}:${key}`)) continue
         const friend = friendMap[entry.user_id]
         if (!friend) continue
-        const itemId = titleKeyToItemId[titleKey]
+        const itemId = keyToItemId[key]
         if (!itemId) continue
         if (!map[itemId]) map[itemId] = []
         map[itemId].push(friend)
@@ -165,7 +166,7 @@ export default function QueuedUpPage() {
 
 function AlsoQueuedBy({ friends }) {
   if (!friends?.length) return null
-  const [first, second, ...rest] = friends
+  const [first, second] = friends
   const firstName = first.display_name || first.username
   let label
   if (friends.length === 1) label = `${firstName} also has this queued`

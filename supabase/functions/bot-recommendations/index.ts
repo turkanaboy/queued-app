@@ -347,15 +347,11 @@ async function upsertRecommendationLog(supabase: any, recommendation: any, userI
     created_at: recommendation.created_at,
   }
 
-  const result = await supabase
-    .from('user_media_log')
-    .upsert(row, { onConflict: 'user_id,media_type,media_id' })
-
-  if (!result.error) return result
-
+  // ignoreDuplicates: an existing log row (with the user's own status/rating)
+  // must not be overwritten just because the active bot pick was re-fetched.
   return await supabase
     .from('user_media_log')
-    .upsert(row, { onConflict: 'user_id,media_id' })
+    .upsert(row, { onConflict: 'user_id,media_type,media_id', ignoreDuplicates: true })
 }
 
 serve(async (req) => {

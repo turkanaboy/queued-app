@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, createContext, useContext } from 'react'
 import { supabase } from '../lib/supabase'
+import { startNativeAuthListener } from '../lib/nativeAuth'
 
 const AuthContext = createContext(null)
 
@@ -10,9 +11,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   async function fetchProfile(userId) {
+    // Explicit columns: the API no longer exposes users.email, so select('*') fails.
     const { data } = await supabase
       .from('users')
-      .select('*')
+      .select('id, username, display_name, platforms, favorite_genres, created_at')
       .eq('id', userId)
       .single()
     setProfile(data)
@@ -38,7 +40,17 @@ export function AuthProvider({ children }) {
       else { setProfile(null); setLoading(false) }
     })
 
-    return () => subscription.unsubscribe()
+    const stopNativeAuthListener = startNativeAuthListener(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session)
+        if (session) fetchProfile(session.user.id)
+      })
+    })
+
+    return () => {
+      stopNativeAuthListener()
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function refreshProfile() {

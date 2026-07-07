@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -10,8 +11,8 @@ import { displayRating } from '../lib/ratings'
 import { upsertMediaLog } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
-import { ProviderRows, RecommendationSheet } from './AddRecommendationPage'
-import { fetchMyChallenges } from '../lib/trivia'
+import { ProviderRows, RecommendationSheet } from '../components/RecommendationComposer'
+import { fetchMyChallenges, MAX_SCORE } from '../lib/trivia'
 import {
   ACTIVE_STATUSES,
   C,
@@ -90,7 +91,7 @@ export default function ProfilePage() {
   }
 
   async function fetchProfile() {
-    const { data } = await supabase.from('users').select('*').eq('id', targetId).single()
+    const { data } = await supabase.from('users').select('id, username, display_name, platforms, favorite_genres').eq('id', targetId).single()
     setProfile(data)
     setDisplayName(data?.display_name || '')
     setSelectedPlatforms(data?.platforms ?? [])
@@ -176,7 +177,7 @@ export default function ProfilePage() {
   }
 
   async function updateLogStatus(item, status) {
-    await supabase.from('user_media_log').update({ status, rating: status === 'finished' ? item.rating : item.rating }).eq('id', item.id)
+    await supabase.from('user_media_log').update({ status }).eq('id', item.id)
     fetchMediaLog()
     fetchStats()
   }
@@ -817,7 +818,7 @@ function TriviaHistorySection({ challenges, userId }) {
               </div>
               <div className="shrink-0 text-right">
                 <p className="font-mono-q text-sm font-extrabold text-[#F7F1E4]">
-                  {myScore ?? '?'}<span className="text-xs text-[rgba(214,240,224,0.35)]">/{13}</span>
+                  {myScore ?? '?'}<span className="text-xs text-[rgba(214,240,224,0.35)]">/{MAX_SCORE}</span>
                 </p>
                 <p className={`text-[11px] font-bold ${outcomeColor}`}>{outcome}</p>
               </div>

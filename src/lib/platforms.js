@@ -13,8 +13,6 @@ export const PLATFORMS = [
   { id: 37,  name: 'Showtime',     color: '#C8102E' },
 ]
 
-export const PLATFORM_MAP = Object.fromEntries(PLATFORMS.map(p => [p.id, p]))
-
 // Returns initials-style abbreviation for pill display
 export function platformInitials(name) {
   if (name === 'Prime Video') return 'Prime'

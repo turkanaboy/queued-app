@@ -1,6 +1,9 @@
 import { supabase } from './supabase'
 import { invokeEdgeFunction } from './edgeFunctions'
 
+// Max points per game: 10 MCQs x 1pt + fill-in-the-blank bonus x 3pts.
+export const MAX_SCORE = 13
+
 /**
  * Kick off a new trivia challenge. Calls the generate-trivia edge function
  * which builds questions and inserts the challenge row.

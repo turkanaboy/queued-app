@@ -95,12 +95,3 @@ export const TASTE_GENRE_GROUPS = [
   },
 ]
 
-export const TASTE_GENRES = TASTE_GENRE_GROUPS.flatMap(group => group.genres)
-export const UNIQUE_TASTE_GENRES = [...new Set(TASTE_GENRES)]
-
-export const WATCHING_STYLES = [
-  { value: 'solo', label: 'Solo viewer', icon: 'S' },
-  { value: 'partner', label: 'With someone', icon: '2' },
-  { value: 'family', label: 'Family nights', icon: 'F' },
-  { value: 'flexible', label: 'Whatever mood', icon: '*' },
-]

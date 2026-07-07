@@ -25,20 +25,28 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [ratingStep, setRatingStep] = useState(null)
   const [review, setReview] = useState('')
   const debounceRef = useRef(null)
+  const latestQueryRef = useRef('')
 
   async function search(q, type = searchType) {
     setQuery(q)
     setSelected(null)
     setProviders(null)
+    latestQueryRef.current = q
     clearTimeout(debounceRef.current)
     if (q.length < 2) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const json = await invokeEdgeFunction('search-media', {
-        path: `?query=${encodeURIComponent(q)}&type=${type}`,
-      })
-      setResults(json.results ?? [])
-      setSearching(false)
+      try {
+        const json = await invokeEdgeFunction('search-media', {
+          path: `?query=${encodeURIComponent(q)}&type=${type}`,
+        })
+        if (latestQueryRef.current !== q) return
+        setResults(json.results ?? [])
+      } catch {
+        if (latestQueryRef.current === q) setResults([])
+      } finally {
+        if (latestQueryRef.current === q) setSearching(false)
+      }
     }, 400)
   }
 

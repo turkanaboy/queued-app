@@ -21,10 +21,6 @@ export function getProviderLink(provider, title, tmdbJwLink) {
   return tmdbJwLink || `https://www.justwatch.com/us/search?q=${q}`
 }
 
-export function getJustWatchLink(title) {
-  return `https://www.justwatch.com/us/search?q=${encodeURIComponent(title)}`
-}
-
 // ── Books ────────────────────────────────────────────────────
 export function getBookLinks(title, creator) {
   const q = encodeURIComponent(`${title}${creator ? ` ${creator}` : ''}`)

@@ -1,9 +1,10 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import RatingModal from '../components/RatingModal'
-import { RecommendationSheet } from './AddRecommendationPage'
+import { RecommendationSheet } from '../components/RecommendationComposer'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
 import { Chip, EmptyState, MEDIA_ORDER, MediumTabs, PosterTile, ScreenHeader, SectionTitle, SearchField } from '../lib/queuedDesign'
 import { displayRating } from '../lib/ratings'
@@ -37,6 +38,7 @@ export default function CollectionPage() {
   const [genre, setGenre] = useState('all')
   const [saveError, setSaveError] = useState('')
   const searchDebounceRef = useRef(null)
+  const latestQueryRef = useRef('')
   const sectionRequestRef = useRef({})
 
   useEffect(() => {
@@ -67,14 +69,20 @@ export default function CollectionPage() {
     const requestKey = `${nextGenre}:${page}`
     sectionRequestRef.current[mediaType] = requestKey
     setLoading(prev => ({ ...prev, [mediaType]: true }))
-    const json = await fetchTrending(mediaType, page, nextGenre)
-    if (sectionRequestRef.current[mediaType] !== requestKey) return
-    setItems(prev => {
-      const next = page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])]
-      return { ...prev, [mediaType]: [...new Map(next.map(item => [mediaKey(item), item])).values()] }
-    })
-    setPages(prev => ({ ...prev, [mediaType]: page }))
-    setLoading(prev => ({ ...prev, [mediaType]: false }))
+    try {
+      const json = await fetchTrending(mediaType, page, nextGenre)
+      if (sectionRequestRef.current[mediaType] !== requestKey) return
+      setItems(prev => {
+        const next = page === 1 ? (json.results ?? []) : [...prev[mediaType], ...(json.results ?? [])]
+        return { ...prev, [mediaType]: [...new Map(next.map(item => [mediaKey(item), item])).values()] }
+      })
+      setPages(prev => ({ ...prev, [mediaType]: page }))
+    } catch {
+      if (sectionRequestRef.current[mediaType] === requestKey) setSaveError('Could not load titles. Check your connection and try again.')
+    } finally {
+      // Only the current request owns the loading flag; a superseded one leaves it.
+      if (sectionRequestRef.current[mediaType] === requestKey) setLoading(prev => ({ ...prev, [mediaType]: false }))
+    }
   }
 
   async function fetchProviders(item) {
@@ -145,6 +153,7 @@ export default function CollectionPage() {
 
   function handleSearch(q) {
     setQuery(q)
+    latestQueryRef.current = q
     clearTimeout(searchDebounceRef.current)
     if (q.length < 2) {
       setSearchResults([])
@@ -152,9 +161,15 @@ export default function CollectionPage() {
     }
     searchDebounceRef.current = setTimeout(async () => {
       setSearching(true)
-      const json = await searchMedia(`?query=${encodeURIComponent(q)}&type=${medium}`)
-      setSearchResults(json.results ?? [])
-      setSearching(false)
+      try {
+        const json = await searchMedia(`?query=${encodeURIComponent(q)}&type=${medium}`)
+        if (latestQueryRef.current !== q) return // a newer query superseded this one
+        setSearchResults(json.results ?? [])
+      } catch {
+        if (latestQueryRef.current === q) setSearchResults([])
+      } finally {
+        if (latestQueryRef.current === q) setSearching(false)
+      }
     }, 350)
   }
 
@@ -258,16 +273,20 @@ function DiscoverCard({ item, logEntry, onTap, onQueue }) {
   const queued = logEntry?.status === 'queued'
   return (
     <article className="min-w-0">
-      <button onClick={onTap} className="btn-press w-full text-left">
-        <PosterTile item={item} className="w-full" h={120} radius={12}>
-          <button onClick={e => { e.stopPropagation(); onQueue() }}
-            className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${queued ? 'bg-[#2DD48F] text-[#052016]' : logEntry ? 'bg-[#D8A84A] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
-            {logEntry ? '✓' : '+'}
-          </button>
-          {logEntry?.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-[rgba(2,12,8,0.82)] px-2 py-1 text-[10.5px] font-semibold text-[#D8A84A] backdrop-blur">Rating {displayRating(logEntry.rating)}</div>}
-          {queued && <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#2DD48F]" />}
-        </PosterTile>
-      </button>
+      {/* Queue button is a sibling of the tap button (not nested) — nested
+          buttons are invalid HTML with browser-dependent click handling. */}
+      <div className="relative">
+        <button onClick={onTap} className="btn-press block w-full text-left">
+          <PosterTile item={item} className="w-full" h={120} radius={12}>
+            {logEntry?.rating && <div className="font-mono-q absolute bottom-1.5 left-1.5 rounded-full bg-[rgba(2,12,8,0.82)] px-2 py-1 text-[10.5px] font-semibold text-[#D8A84A] backdrop-blur">Rating {displayRating(logEntry.rating)}</div>}
+            {queued && <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#2DD48F]" />}
+          </PosterTile>
+        </button>
+        <button onClick={onQueue}
+          className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${queued ? 'bg-[#2DD48F] text-[#052016]' : logEntry ? 'bg-[#D8A84A] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
+          {logEntry ? '✓' : '+'}
+        </button>
+      </div>
       <p className="mt-1.5 line-clamp-2 text-xs font-bold leading-tight text-[#F7F1E4]">{item.media_title}</p>
       <p className="mt-0.5 truncate text-[10.5px] text-[rgba(214,240,224,0.5)]">{item.media_creator || item.year}</p>
     </article>

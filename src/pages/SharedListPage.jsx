@@ -1,11 +1,15 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
-import { ProviderRows } from './AddRecommendationPage'
+import { ProviderRows } from '../components/RecommendationComposer'
 import { upsertMediaLog } from '../lib/mediaLog'
 import { Chip, C, EmptyState, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, STATUS_ORDER, StatusMenu } from '../lib/queuedDesign'
+import { displayRating } from '../lib/ratings'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const STATUS_LABELS = { all: 'All', not_yet_viewed: 'New', queued: 'Queued', in_progress: 'Watching', finished: 'Finished', skipped: 'Skipped', bailed: 'Bailed' }
 
@@ -23,16 +27,17 @@ export default function SharedListPage() {
   useEffect(() => { fetchFriend(); fetchRecs() }, [friendId, session])
 
   async function fetchFriend() {
-    const { data } = await supabase.from('users').select('*').eq('id', friendId).single()
+    const { data } = await supabase.from('users').select('id, username, display_name').eq('id', friendId).single()
     setFriend(data)
   }
 
   async function fetchRecs() {
     setLoading(true)
     const uid = session.user.id
+    if (!UUID_RE.test(friendId)) { setRecs([]); setLoading(false); return }
     const { data } = await supabase
       .from('recommendations')
-      .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name), comments(id)')
+      .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name)')
       .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -183,10 +188,9 @@ function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange
           <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-[rgba(214,240,224,0.6)]">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: fromThem ? C.gold : C.brass }} />
             From {name}
-            <span className="ml-1 text-[rgba(214,240,224,0.45)]">◌ {rec.comments?.length ?? 0}</span>
           </p>
           {rec.note && <p className="mt-1.5 line-clamp-2 text-xs text-[rgba(214,240,224,0.7)]">{rec.note}</p>}
-          {rec.rating && <p className="font-mono-q mt-1 text-xs font-semibold text-[#D8A84A]">★ {rec.rating}</p>}
+          {rec.rating && <p className="font-mono-q mt-1 text-xs font-semibold text-[#D8A84A]">★ {displayRating(rec.rating)}</p>}
           <div className="mt-2"><ProviderRows providers={rec.streaming_providers} title={rec.media_title} creator={rec.media_creator} mediaType={rec.media_type} myPlatforms={myPlatforms} /></div>
           <div className="mt-2 flex items-center gap-2">
             {fromThem && rec.recipient_status !== 'finished' && <button onClick={() => onStatusChange('finished')} className="btn-press rounded-full border border-[#D8A84A]/40 px-3 py-1.5 text-xs font-bold text-[#D8A84A]">★ Rate</button>}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useUnreadCount } from '../hooks/useUnreadCount'
 import { useTriviaChallenges } from '../hooks/useTriviaChallenges'
-import { RecommendationSheet } from '../pages/AddRecommendationPage'
+import { RecommendationSheet } from './RecommendationComposer'
 
 export default function Layout() {
   const unreadCount = useUnreadCount()
@@ -123,18 +123,6 @@ function ProfileIcon() {
     </svg>
   )
 }
-
-function PartiesIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="2"/>
-      <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="2"/>
-      <path d="M2 19c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M17 14c1.7.4 3 1.9 3 3.7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
 
 export function InitialsAvatar({ name, size = 'md', className = '' }) {
   const initials = (name || '?')

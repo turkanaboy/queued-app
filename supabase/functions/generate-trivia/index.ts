@@ -346,6 +346,9 @@ serve(async (req) => {
   if (!initiator_id || !challenger_id || !mode) {
     return json({ error: 'initiator_id, challenger_id, and mode are required' }, 400)
   }
+  if (initiator_id === challenger_id) {
+    return json({ error: 'you cannot challenge yourself' }, 400)
+  }
   if (!['balanced', 'my_media', 'random'].includes(mode)) {
     return json({ error: 'mode must be balanced, my_media, or random' }, 400)
   }
@@ -367,6 +370,34 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   })
+
+  // Only accepted friends can be challenged. Without this check anyone could
+  // target an arbitrary user id — and in balanced mode the generated questions
+  // would leak titles from that user's private media log.
+  const [pairA, pairB] = initiator_id < challenger_id
+    ? [initiator_id, challenger_id]
+    : [challenger_id, initiator_id]
+  const { data: friendship } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('user_a_id', pairA)
+    .eq('user_b_id', pairB)
+    .eq('status', 'accepted')
+    .maybeSingle()
+  if (!friendship) {
+    return json({ error: 'you can only challenge accepted friends' }, 403)
+  }
+
+  // Rate limit: each generation spends Claude tokens, so cap challenges per hour.
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { count: recentCount } = await supabase
+    .from('trivia_challenges')
+    .select('*', { count: 'exact', head: true })
+    .eq('initiator_id', initiator_id)
+    .gte('created_at', oneHourAgo)
+  if ((recentCount ?? 0) >= 10) {
+    return json({ error: 'Too many challenges in the last hour — try again later.' }, 429)
+  }
 
   try {
     let questions: (MultipleChoiceQuestion | FillInBlankQuestion)[]
@@ -425,7 +456,14 @@ serve(async (req) => {
       questions = [...mcqQuestions, bonusQuestion]
     }
 
-    // Insert the challenge row
+    // The public row stores questions WITHOUT the answer key (participants can
+    // select their own challenge rows); the full key goes into
+    // private.trivia_answer_keys, which only submit-trivia can read.
+    const sanitizedQuestions = questions.map(q => {
+      const { correct_index: _ci, accepted_answers: _aa, correct_display: _cd, ...rest } = q as any
+      return rest
+    })
+
     const { data: challenge, error: insertError } = await supabase
       .from('trivia_challenges')
       .insert({
@@ -434,13 +472,22 @@ serve(async (req) => {
         mode,
         media_types: media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game'],
         status: 'pending_initiator',
-        questions,
+        questions: sanitizedQuestions,
       })
       .select('id')
       .single()
 
     if (insertError || !challenge) {
       return json({ error: insertError?.message ?? 'Failed to insert challenge' }, 500)
+    }
+
+    const { error: keyError } = await supabase.rpc('store_trivia_answer_key', {
+      p_challenge_id: challenge.id,
+      p_questions: questions,
+    })
+    if (keyError) {
+      await supabase.from('trivia_challenges').delete().eq('id', challenge.id)
+      return json({ error: `Failed to store answer key: ${keyError.message}` }, 500)
     }
 
     return json({ challenge_id: challenge.id })

@@ -1,7 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { fetchChallenge, submitAnswers } from '../lib/trivia'
+import { fetchChallenge, submitAnswers, MAX_SCORE } from '../lib/trivia'
 import { InitialsAvatar } from '../components/Layout'
 import { ScreenHeader } from '../lib/queuedDesign'
 
@@ -16,41 +17,37 @@ function displayName(user) {
   return user?.display_name || user?.username || 'Player'
 }
 
-function winnerLabel(myScore, theirScore, myRole) {
+function winnerLabel(myScore, theirScore) {
   if (myScore > theirScore) return { text: 'You won! 🏆', color: '#2DD48F' }
-  if (myScore < theirScore) return { text: `${myRole === 'challenger' ? 'They' : 'They'} won this time`, color: '#C96B4B' }
+  if (myScore < theirScore) return { text: 'They won this time', color: '#C96B4B' }
   return { text: "It's a tie! 🤝", color: '#D8A84A' }
 }
 
 // ── Sub-components ────────────────────────────────────────────
 
-function CountdownBar({ timerSeconds, running, key: barKey }) {
+// Remount (via the `key` the parent passes on the JSX element) restarts the
+// CSS countdown animation each question; when not running the bar reads empty.
+function CountdownBar({ timerSeconds, running }) {
   const style = running
-    ? {
-        animation: `countdown ${timerSeconds}s linear forwards`,
-        animationPlayState: 'running',
-      }
-    : { width: running === false ? '0%' : '100%' }
+    ? { animation: `countdown ${timerSeconds}s linear forwards` }
+    : { width: '0%' }
 
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-[rgba(150,214,180,0.13)]">
-      <div
-        key={barKey}
-        className="h-full rounded-full bg-[#D8A84A]"
-        style={style}
-      />
+      <div className="h-full rounded-full bg-[#D8A84A]" style={style} />
     </div>
   )
 }
 
 function OptionButton({ label, text, state, onClick, disabled }) {
-  // state: 'idle' | 'correct' | 'wrong' | 'faded'
+  // state: 'idle' | 'locked' (the option the player chose) | 'faded'.
+  // Correctness is not shown here — the answer key lives server-side and is
+  // only revealed on the results screen after submission.
   const base = 'btn-press relative w-full rounded-[16px] border px-4 py-3.5 text-left text-sm font-semibold transition-all'
 
   const stateStyles = {
     idle: 'border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.6)] text-[#F7F1E4]',
-    correct: 'border-[#2DD48F] bg-[rgba(45,212,143,0.18)] text-[#2DD48F]',
-    wrong: 'border-rose-400 bg-rose-500/15 text-rose-300',
+    locked: 'border-[#D8A84A] bg-[rgba(216,168,74,0.16)] text-[#F4E9D1]',
     faded: 'border-[rgba(150,214,180,0.1)] bg-[rgba(9,46,32,0.3)] opacity-30 text-[rgba(214,240,224,0.5)]',
   }
 
@@ -60,15 +57,12 @@ function OptionButton({ label, text, state, onClick, disabled }) {
       onClick={onClick}
       disabled={disabled}
       className={`${base} ${stateStyles[state] || stateStyles.idle}`}
-      style={state === 'correct' ? { animation: 'qBounceIn 380ms cubic-bezier(0.16,1,0.3,1) both' } : undefined}
+      style={state === 'locked' ? { animation: 'qBounceIn 380ms cubic-bezier(0.16,1,0.3,1) both' } : undefined}
     >
       <span className="mr-3 font-mono text-xs font-bold opacity-60">{label}</span>
       {text}
-      {state === 'correct' && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#2DD48F]">✓</span>
-      )}
-      {state === 'wrong' && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400">✗</span>
+      {state === 'locked' && (
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D8A84A]">•</span>
       )}
     </button>
   )
@@ -98,12 +92,12 @@ export default function TriviaChallengePage() {
 
   // Results
   const [results, setResults] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
   // Timer
   const timerRef = useRef(null)
-  const [timerRunning, setTimerRunning] = useState(false)
+  const [, setTimerRunning] = useState(false)
   const [barKey, setBarKey] = useState(0)
 
   // Load challenge
@@ -225,8 +219,10 @@ export default function TriviaChallengePage() {
       setResults(res)
       setScreen('results')
     } catch (err) {
+      // Stay on the submitting screen, which renders a Retry button. Returning
+      // to the quiz would restart the Q11 timer and append a 12th answer,
+      // permanently breaking the exactly-11 contract the server enforces.
       setSubmitError(err?.message || 'Failed to submit. Please try again.')
-      setScreen('quiz') // allow retry — but we stay on the submission screen
       setSubmitting(false)
     }
   }
@@ -287,8 +283,8 @@ export default function TriviaChallengePage() {
           {myScore != null && (
             <div className="rounded-[18px] border border-[#D8A84A]/30 bg-[rgba(216,168,74,0.08)] px-6 py-4">
               <p className="font-mono-q text-xs font-semibold uppercase tracking-[2px] text-[#D8A84A]">Your score</p>
-              <p className="mt-1 text-4xl font-extrabold text-[#F7F1E4]">{myScore}<span className="text-xl text-[rgba(214,240,224,0.4)]">/13</span></p>
-              {myScore >= 11 && <p className="mt-1 text-xs text-[#D8A84A]">+3 bonus included! ⭐</p>}
+              <p className="mt-1 text-4xl font-extrabold text-[#F7F1E4]">{myScore}<span className="text-xl text-[rgba(214,240,224,0.4)]">/{MAX_SCORE}</span></p>
+              {myScore >= MAX_SCORE - 2 && <p className="mt-1 text-xs text-[#D8A84A]">+3 bonus included! ⭐</p>}
             </div>
           )}
           <div>
@@ -334,18 +330,11 @@ export default function TriviaChallengePage() {
   const isFill = currentQ?.type === 'fill_in_blank'
   const timerSeconds = isFill ? FILL_IN_BLANK_TIMER_SECONDS : MCQ_TIMER_SECONDS
 
-  // Compute option states for reveal
+  // Compute option states for reveal. Correctness is unknown client-side (the
+  // answer key is server-only), so we only highlight the locked-in choice.
   function getOptionState(idx) {
     if (phase === 'active') return 'idle'
-    if (timedOut) return 'faded' // shouldn't happen but guard
-    const correctIdx = currentQ.correct_index
-    if (selectedOption === null) {
-      // Timed out — show correct
-      return idx === correctIdx ? 'correct' : 'faded'
-    }
-    if (idx === correctIdx) return 'correct'
-    if (idx === selectedOption && idx !== correctIdx) return 'wrong'
-    return 'faded'
+    return idx === selectedOption ? 'locked' : 'faded'
   }
 
   const slideStyle = phase === 'exit'
@@ -444,26 +433,12 @@ export default function TriviaChallengePage() {
             <div className="space-y-3">
               {phase === 'reveal' ? (
                 <div
-                  className={`rounded-[16px] border px-4 py-3.5 text-center text-sm font-bold ${
-                    selectedOption !== null && isFuzzyMatchClient(
-                      typeof selectedOption === 'string' ? selectedOption : '',
-                      currentQ?.accepted_answers ?? []
-                    )
-                      ? 'border-[#2DD48F] bg-[rgba(45,212,143,0.15)] text-[#2DD48F]'
-                      : 'border-rose-400 bg-rose-500/10 text-rose-300'
-                  }`}
+                  className="rounded-[16px] border border-[#D8A84A] bg-[rgba(216,168,74,0.14)] px-4 py-3.5 text-center text-sm font-bold text-[#F4E9D1]"
                   style={{ animation: 'qBounceIn 380ms cubic-bezier(0.16,1,0.3,1) both' }}
                 >
-                  {selectedOption !== null && isFuzzyMatchClient(
-                    typeof selectedOption === 'string' ? selectedOption : '',
-                    currentQ?.accepted_answers ?? []
-                  ) ? (
-                    <span>Correct! +3 pts — {currentQ?.correct_display} ✓</span>
-                  ) : selectedOption === null || selectedOption === '' ? (
-                    <span>Time's up — the answer was <strong>{currentQ?.correct_display}</strong></span>
-                  ) : (
-                    <span>Incorrect — the answer was <strong>{currentQ?.correct_display}</strong></span>
-                  )}
+                  {typeof selectedOption === 'string' && selectedOption.trim()
+                    ? <span>Locked in: <strong>{selectedOption}</strong></span>
+                    : <span>⏰ Time's up — no answer</span>}
                 </div>
               ) : (
                 <>
@@ -502,46 +477,9 @@ export default function TriviaChallengePage() {
   )
 }
 
-// ── Client-side fuzzy match (for reveal feedback only) ────────
-function normalizeClient(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^(the|a|an)\s+/i, '')
-}
-
-function levenshteinClient(a, b) {
-  const m = a.length, n = b.length
-  const dp = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-  )
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-  return dp[m][n]
-}
-
-function isFuzzyMatchClient(userInput, acceptedAnswers) {
-  if (!userInput) return false
-  const normalized = normalizeClient(userInput)
-  if (!normalized) return false
-  for (const accepted of acceptedAnswers) {
-    const norm = normalizeClient(accepted)
-    if (normalized === norm) return true
-    const threshold = norm.length <= 8 ? 2 : 3
-    if (levenshteinClient(normalized, norm) <= threshold) return true
-  }
-  return false
-}
-
 // ── Results screen ────────────────────────────────────────────
 function ResultsScreen({ challenge, results, uid, onBack }) {
   const isInitiator = challenge?.initiator_id === uid
-  const isChallenger = challenge?.challenger_id === uid
 
   // results.my_score is the fresh score from the edge function response.
   // challenge scores are fetched before submission so they're null at first render;
@@ -568,9 +506,9 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
           <div className="rounded-[18px] border border-[#D8A84A]/30 bg-[rgba(216,168,74,0.08)] px-8 py-5">
             <p className="font-mono-q text-xs font-semibold uppercase tracking-[2px] text-[#D8A84A]">Your score</p>
             <p className="mt-1 text-5xl font-extrabold text-[#F7F1E4]">
-              {myScore}<span className="text-2xl text-[rgba(214,240,224,0.4)]">/13</span>
+              {myScore}<span className="text-2xl text-[rgba(214,240,224,0.4)]">/{MAX_SCORE}</span>
             </p>
-            {myScore != null && myScore >= 11 && (
+            {myScore != null && myScore >= MAX_SCORE - 2 && (
               <p className="mt-1.5 text-xs font-semibold text-[#D8A84A]">⭐ Bonus included!</p>
             )}
           </div>
@@ -589,13 +527,13 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
   }
 
   // Both players done — full results
-  const initiatorScore = isChallenger ? theirScore : myScore
-  const challengerScore = isChallenger ? myScore : theirScore
-  const winnerInfo = winnerLabel(myScore ?? 0, theirScore ?? 0, isChallenger ? 'challenger' : 'initiator')
+  const winnerInfo = winnerLabel(myScore ?? 0, theirScore ?? 0)
 
-  // Question details come from the results response (challenger) or aren't available (initiator viewing completed)
+  // Question details + the submitter's per-question marks come from the fresh
+  // submit response; they aren't available when viewing an already-completed
+  // challenge (questions are wiped on completion).
   const questionDetails = results?.question_details ?? null
-  const challengerPerQ = results?.challenger_per_question ?? null
+  const myPerQuestion = results?.my_per_question ?? results?.challenger_per_question ?? null
 
   return (
     <div className="min-h-dvh pb-8">
@@ -640,7 +578,7 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
             </p>
             <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)]">
               {questionDetails.map((q, i) => {
-                const challengerGotIt = challengerPerQ?.[i] ?? null
+                const gotIt = myPerQuestion?.[i] ?? null
                 const isB = i === 10
                 return (
                   <div
@@ -660,10 +598,10 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
                           ✓ {q.correct_answer}
                         </p>
                       </div>
-                      {/* My result */}
-                      {isChallenger && (
-                        <div className={`shrink-0 text-lg ${challengerGotIt ? 'text-[#2DD48F]' : 'text-rose-400'}`}>
-                          {challengerGotIt ? '✓' : '✗'}
+                      {/* My result for this question */}
+                      {gotIt !== null && (
+                        <div className={`shrink-0 text-lg ${gotIt ? 'text-[#2DD48F]' : 'text-rose-400'}`}>
+                          {gotIt ? '✓' : '✗'}
                         </div>
                       )}
                     </div>
@@ -693,7 +631,7 @@ function ScoreCard({ user, score, label, highlight = false }) {
       <p className="mt-2 truncate text-xs font-bold text-[#F7F1E4]">{label}</p>
       <p className="mt-1 text-3xl font-extrabold text-[#F7F1E4]">
         {score ?? '—'}
-        <span className="text-sm font-semibold text-[rgba(214,240,224,0.35)]">/13</span>
+        <span className="text-sm font-semibold text-[rgba(214,240,224,0.35)]">/{MAX_SCORE}</span>
       </p>
     </div>
   )

@@ -159,8 +159,8 @@ export async function getPartyInviteCandidates(partyId, userId) {
 
 // ── Queue & overlap ───────────────────────────────────────────
 
+// Everything from the user's log (any status) that isn't already on the party list.
 export async function getMyLogItems(partyId, userId) {
-  // Fetch already-listed media IDs to exclude
   const { data: listed } = await supabase
     .from('party_list_items')
     .select('media_type, media_id')
@@ -178,8 +178,6 @@ export async function getMyLogItems(partyId, userId) {
 
   return (data ?? []).filter(i => !listedKeys.has(`${i.media_type}:${i.media_id}`))
 }
-
-export const getMyQueueItems = getMyLogItems
 
 export async function getOverlapSuggestions(partyId) {
   // Fetch all party members
@@ -201,11 +199,13 @@ export async function getOverlapSuggestions(partyId) {
 
   const listedKeys = new Set((listed ?? []).map(i => `${i.media_type}:${i.media_id}`))
 
-  // Fetch queued items across all party members
+  // Queued (not yet watched) items across all party members — suggesting
+  // titles people already finished defeats the watch-together purpose.
   const { data: queueItems, error: queueError } = await supabase
     .from('user_media_log')
     .select('user_id, media_type, media_id, media_title, media_creator, media_poster_url')
     .in('user_id', memberIds)
+    .eq('status', 'queued')
 
   if (queueError) throw queueError
 

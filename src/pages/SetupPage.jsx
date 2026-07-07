@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -18,10 +18,12 @@ export default function SetupPage() {
   const [selectedGenres, setSelectedGenres] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const latestUsernameRef = useRef('')
 
   async function checkUsername(val) {
     setUsername(val)
     setAvailable(null)
+    latestUsernameRef.current = val
     if (val.length < 3) return
     setChecking(true)
     const { data } = await supabase
@@ -29,6 +31,7 @@ export default function SetupPage() {
       .select('id')
       .eq('username', val)
       .maybeSingle()
+    if (latestUsernameRef.current !== val) return // a newer keystroke superseded this check
     setAvailable(!data)
     setChecking(false)
   }

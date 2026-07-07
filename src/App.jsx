@@ -1,31 +1,36 @@
-import { useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
-import LoginPage from './pages/LoginPage'
-import SetupPage from './pages/SetupPage'
-import FriendsPage from './pages/FriendsPage'
-import SharedListPage from './pages/SharedListPage'
-import AddRecommendationPage from './pages/AddRecommendationPage'
-import ProfilePage from './pages/ProfilePage'
-import CollectionPage from './pages/CollectionPage'
-import QueuedUpPage from './pages/QueuedUpPage'
-import TriviaChallengePage from './pages/TriviaChallengePage'
 import Layout from './components/Layout'
 import { acceptStoredInvite, getInviteFromUrl, getStoredInvite, rememberInvite } from './lib/invites'
 import { clearStoredPartyInvite, getPartyInviteFromUrl, getStoredPartyInvite, joinParty, rememberPartyInvite } from './lib/parties'
-import PartiesPage from './pages/PartiesPage'
-import PartyDetailPage from './pages/PartyDetailPage'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const SetupPage = lazy(() => import('./pages/SetupPage'))
+const FriendsPage = lazy(() => import('./pages/FriendsPage'))
+const SharedListPage = lazy(() => import('./pages/SharedListPage'))
+const AddRecommendationPage = lazy(() => import('./pages/AddRecommendationPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const CollectionPage = lazy(() => import('./pages/CollectionPage'))
+const QueuedUpPage = lazy(() => import('./pages/QueuedUpPage'))
+const TriviaChallengePage = lazy(() => import('./pages/TriviaChallengePage'))
+const PartiesPage = lazy(() => import('./pages/PartiesPage'))
+const PartyDetailPage = lazy(() => import('./pages/PartyDetailPage'))
+
+function LoadingScreen() {
+  return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading…</div>
+}
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading…</div>
+  if (loading) return <LoadingScreen />
   if (!session) return <Navigate to="/login" replace />
   return children
 }
 
 function RequireUsername({ children }) {
   const { profile, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading…</div>
+  if (loading) return <LoadingScreen />
   if (!profile?.username) return <Navigate to="/setup" replace />
   return children
 }
@@ -36,6 +41,7 @@ function InviteHandler() {
   const navigate = useNavigate()
   const acceptingRef = useRef(false)
   const joiningPartyRef = useRef(false)
+  const attemptedPartyTokens = useRef(new Set())
 
   useEffect(() => {
     const invite = getInviteFromUrl(location.search)
@@ -59,11 +65,15 @@ function InviteHandler() {
   useEffect(() => {
     if (loading || joiningPartyRef.current || !session || !profile?.username || !getStoredPartyInvite()) return
 
-    joiningPartyRef.current = true
     const token = getStoredPartyInvite()
-    clearStoredPartyInvite()
+    // Try each token at most once per session so a failure doesn't loop, but
+    // keep it in storage on failure so a transient error can retry next launch.
+    if (attemptedPartyTokens.current.has(token)) return
+    attemptedPartyTokens.current.add(token)
+    joiningPartyRef.current = true
     joinParty(token)
       .then(partyId => {
+        clearStoredPartyInvite()
         navigate(`/parties/${partyId}`, { replace: true })
       })
       .catch(() => {
@@ -79,34 +89,36 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <InviteHandler />
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
 
-        <Route path="/setup" element={
-          <RequireAuth>
-            <SetupPage />
-          </RequireAuth>
-        } />
+          <Route path="/setup" element={
+            <RequireAuth>
+              <SetupPage />
+            </RequireAuth>
+          } />
 
-        <Route element={
-          <RequireAuth>
-            <RequireUsername>
-              <Layout />
-            </RequireUsername>
-          </RequireAuth>
-        }>
-          <Route index element={<Navigate to="/friends" replace />} />
-          <Route path="/friends" element={<FriendsPage />} />
-          <Route path="/list/:friendId" element={<SharedListPage />} />
-          <Route path="/add" element={<AddRecommendationPage />} />
-          <Route path="/queued" element={<QueuedUpPage />} />
-          <Route path="/collection" element={<CollectionPage />} />
-          <Route path="/profile/:userId?" element={<ProfilePage />} />
-          <Route path="/trivia/:challengeId" element={<TriviaChallengePage />} />
-          <Route path="/parties" element={<PartiesPage />} />
-          <Route path="/parties/:partyId" element={<PartyDetailPage />} />
-        </Route>
-      </Routes>
+          <Route element={
+            <RequireAuth>
+              <RequireUsername>
+                <Layout />
+              </RequireUsername>
+            </RequireAuth>
+          }>
+            <Route index element={<Navigate to="/friends" replace />} />
+            <Route path="/friends" element={<FriendsPage />} />
+            <Route path="/list/:friendId" element={<SharedListPage />} />
+            <Route path="/add" element={<AddRecommendationPage />} />
+            <Route path="/queued" element={<QueuedUpPage />} />
+            <Route path="/collection" element={<CollectionPage />} />
+            <Route path="/profile/:userId?" element={<ProfilePage />} />
+            <Route path="/trivia/:challengeId" element={<TriviaChallengePage />} />
+            <Route path="/parties" element={<PartiesPage />} />
+            <Route path="/parties/:partyId" element={<PartyDetailPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

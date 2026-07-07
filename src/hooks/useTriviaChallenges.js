@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useEffect, useId, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { getPendingForUser } from '../lib/trivia'
@@ -23,7 +24,8 @@ export function useTriviaChallenges() {
   const uid = session?.user?.id
   // Each hook instance gets a unique channel name so multiple consumers
   // (Layout badge + FriendsPage) don't collide on the same Supabase channel.
-  const channelName = useRef(`trivia-${Math.random().toString(36).slice(2)}`)
+  const reactId = useId()
+  const channelName = `trivia-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`
 
   const fetchAll = useCallback(async () => {
     if (!uid) return
@@ -43,7 +45,7 @@ export function useTriviaChallenges() {
     fetchAll()
 
     const channel = supabase
-      .channel(channelName.current)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -67,7 +69,7 @@ export function useTriviaChallenges() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [uid, fetchAll])
+  }, [uid, fetchAll, channelName])
 
   // Rows where it's the user's ACTIVE turn — they need to answer
   const pendingChallenges = allPending.filter(c => {

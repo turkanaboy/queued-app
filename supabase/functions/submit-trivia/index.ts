@@ -160,9 +160,27 @@ serve(async (req) => {
     return json({ error: 'not your turn', status: challenge.status }, 409)
   }
 
-  // Score the answers
-  const questions = challenge.questions as Question[]
+  // Score against the private answer key — the public questions column is
+  // sanitized (no correct_index / accepted_answers) so clients can't cheat.
+  const { data: keyQuestions, error: keyError } = await supabase.rpc('get_trivia_answer_key', {
+    p_challenge_id: challenge_id,
+  })
+  if (keyError || !Array.isArray(keyQuestions)) {
+    return json({ error: 'answer key unavailable for this challenge' }, 500)
+  }
+  const questions = keyQuestions as Question[]
   const { score, per_question } = scoreAnswers(questions, answers)
+
+  // Correct answers are only revealed AFTER the player submits — the answer key
+  // never ships with the quiz, so this is the first time the client sees them.
+  const questionDetails = (questions as any[]).map((q) => ({
+    question: q.question,
+    correct_answer: q.type === 'fill_in_blank' ? q.correct_display : q.options[q.correct_index],
+    type: q.type,
+    points: q.type === 'fill_in_blank' ? (q.points ?? 3) : 1,
+    media_title: q.media_title ?? null,
+    media_type: q.media_type ?? null,
+  }))
 
   if (isInitiator) {
     // Save score, advance to pending_challenger. Do NOT wipe questions yet.
@@ -174,29 +192,17 @@ serve(async (req) => {
 
     if (updateError) return json({ error: updateError.message }, 500)
 
-    return json({ ok: true, my_score: score, status: 'pending_challenger' })
+    return json({
+      ok: true,
+      my_score: score,
+      status: 'pending_challenger',
+      question_details: questionDetails,
+      my_per_question: per_question,
+    })
   }
 
-  // Challenger submission — compute correct answers for the results breakdown
-  // before wiping questions.
+  // Challenger submission.
   const initiatorScore = challenge.initiator_score as number
-
-  // Build per-question details for the results screen
-  const questionDetails = (questions as any[]).map((q, i) => ({
-    question: q.question,
-    correct_answer: q.type === 'fill_in_blank' ? q.correct_display : q.options[q.correct_index],
-    type: q.type,
-    points: q.type === 'fill_in_blank' ? (q.points ?? 3) : 1,
-    media_title: q.media_title ?? null,
-    media_type: q.media_type ?? null,
-  }))
-
-  // Re-score initiator's answers can't be done here (we don't store them).
-  // We have initiator_score from DB; we only have per-question for the challenger.
-  // The challenger result screen only shows who got each question right, but
-  // we only have challenger's per_question. Mark initiator per_question as null
-  // — the UI will show scores but not per-question initiator breakdown.
-  // (A future enhancement could store per-question arrays.)
 
   const { error: updateError } = await supabase
     .from('trivia_challenges')
@@ -226,8 +232,9 @@ serve(async (req) => {
     initiator_score: initiatorScore,
     challenger_score: score,
     winner,
-    // Per-question breakdown for results screen (challenger's perspective)
+    // Per-question breakdown for the results screen (submitter's perspective).
     question_details: questionDetails,
+    my_per_question: per_question,
     challenger_per_question: per_question,
   })
 })

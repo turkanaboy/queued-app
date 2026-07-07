@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -30,7 +31,7 @@ export default function FriendsPage() {
     const uid = session.user.id
     const { data } = await supabase
       .from('friendships')
-      .select('*, user_a:users!friendships_user_a_id_fkey(*), user_b:users!friendships_user_b_id_fkey(*)')
+      .select('*, user_a:users!friendships_user_a_id_fkey(id, username, display_name), user_b:users!friendships_user_b_id_fkey(id, username, display_name)')
       .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
     const accepted = [], pendingOut = [], pendingIn = []
     for (const f of data ?? []) {
@@ -276,7 +277,10 @@ export default function FriendsPage() {
       </div>
 
       {triviaSheetOpen && (
-        <TriviaSetupSheet onClose={() => setTriviaSheetOpen(false)} />
+        <TriviaSetupSheet
+          initialFriend={typeof triviaSheetOpen === 'object' ? triviaSheetOpen : null}
+          onClose={() => setTriviaSheetOpen(false)}
+        />
       )}
     </div>
   )
@@ -300,7 +304,6 @@ function FriendRequestRow({ item, first, onAccept, onDecline }) {
 
 function FriendRow({ item, first, onProfile, onList, onChallenge }) {
   const friend = item.friend
-  const shared = (friend?.sent_count ?? 0) + (friend?.received_count ?? 0)
   return (
     <div className={`flex items-center justify-between gap-3 px-4 py-3 ${first ? '' : 'border-t border-[rgba(150,214,180,0.12)]'}`}>
       <button onClick={onProfile} className="flex min-w-0 flex-1 items-center gap-3 text-left">
@@ -308,7 +311,6 @@ function FriendRow({ item, first, onProfile, onList, onChallenge }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-bold text-[#F7F1E4]">{friend?.display_name || friend?.username}</p>
           <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">@{friend?.username}</p>
-          <p className="truncate text-[11.5px] text-[rgba(214,240,224,0.5)]">{friend?.queue_count ?? 0} in queue · {shared} recs shared</p>
         </div>
       </button>
       <div className="flex shrink-0 gap-1.5">

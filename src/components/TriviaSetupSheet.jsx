@@ -24,14 +24,14 @@ const MODES = [
   },
 ]
 
-export default function TriviaSetupSheet({ onClose }) {
+export default function TriviaSetupSheet({ onClose, initialFriend = null }) {
   const { session } = useAuth()
   const navigate = useNavigate()
 
   const [mode, setMode] = useState('balanced')
   const [mediaTypes, setMediaTypes] = useState(MEDIA_ORDER)
   const [friends, setFriends] = useState([])
-  const [selectedFriend, setSelectedFriend] = useState(null)
+  const [selectedFriend, setSelectedFriend] = useState(initialFriend)
   const [loadingFriends, setLoadingFriends] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
@@ -43,7 +43,7 @@ export default function TriviaSetupSheet({ onClose }) {
     async function fetchFriends() {
       const { data } = await supabase
         .from('friendships')
-        .select('*, user_a:users!friendships_user_a_id_fkey(*), user_b:users!friendships_user_b_id_fkey(*)')
+        .select('*, user_a:users!friendships_user_a_id_fkey(id, username, display_name), user_b:users!friendships_user_b_id_fkey(id, username, display_name)')
         .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
         .eq('status', 'accepted')
       const list = (data ?? []).map(f => ({
