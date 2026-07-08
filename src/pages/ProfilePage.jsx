@@ -333,7 +333,7 @@ export default function ProfilePage() {
           origin: item.source_type === 'recommendation' && item.source_user
             ? (item.source_user.display_name || item.source_user.username)
             : item.source_type === 'party'
-              ? 'Movie night'
+              ? 'Group pick'
               : 'Self',
           origin_type: item.source_type === 'recommendation' ? 'recommendation' : item.source_type === 'party' ? 'party' : 'self',
           origin_user_id: item.source_user_id,

@@ -125,7 +125,7 @@ export default function QueuedUpPage() {
               ))}
             </div>
           ) : items.filter(item => item.media_type === medium).length === 0 ? (
-            <EmptyState title="Your queue is clear" body="Tap the plus button to add something you want to watch, read, or hear." />
+            <EmptyState title="Your queue is clear" body="Tap the plus button to add something you want to enjoy." />
           ) : (
             items.filter(item => item.media_type === medium).map((item, index) => (
               <div key={item.id} className={`flex items-start gap-3 px-[13px] py-[11px] ${index ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>

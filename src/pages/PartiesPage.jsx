@@ -13,6 +13,7 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newMode, setNewMode] = useState('curated')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
@@ -39,7 +40,7 @@ export default function PartiesPage() {
     setCreating(true)
     setCreateError('')
     try {
-      const party = await createParty(name)
+      const party = await createParty(name, newMode)
       navigate(`/parties/${party.id}`)
     } catch (err) {
       setCreateError(err.message ?? 'Could not create party')
@@ -49,20 +50,35 @@ export default function PartiesPage() {
 
   return (
     <div className="pb-5">
-      <ScreenHeader title="Parties" subtitle="Watch together with your crew" />
+      <ScreenHeader title="Groups" subtitle="Curate shared lists with your people" />
       <div className="space-y-5 px-[18px]">
 
-        {/* Create party */}
+        {/* Create group */}
         {showCreate ? (
           <form onSubmit={handleCreate} className="rounded-[18px] border border-[rgba(216,168,74,0.26)] bg-[linear-gradient(135deg,rgba(216,168,74,0.16),rgba(45,212,143,0.08))] p-4 shadow-[inset_3px_0_0_rgba(216,168,74,0.48)]">
-            <p className="mb-3 text-sm font-extrabold text-[#F7F1E4]">Name your party</p>
+            <p className="mb-3 text-sm font-extrabold text-[#F7F1E4]">Name your group</p>
+            <div className="mb-3 flex gap-2 rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.45)] p-1">
+              {[
+                ['curated', 'Curated list'],
+                ['rotating_picker', 'Rotating picker'],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setNewMode(mode)}
+                  className={`btn-press flex-1 rounded-full px-3 py-2 text-xs font-bold ${newMode === mode ? 'bg-[#F4E9D1] text-[#052016]' : 'text-[rgba(214,240,224,0.65)]'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               <input
                 autoFocus
                 type="text"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
-                placeholder="e.g. Movie night crew"
+                placeholder="e.g. Weekend picks"
                 maxLength={60}
                 className="min-w-0 flex-1 rounded-full border border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.6)] px-4 py-2 text-sm text-[#F7F1E4] placeholder-[rgba(214,240,224,0.35)] outline-none focus:border-[rgba(150,214,180,0.45)]"
               />
@@ -75,7 +91,7 @@ export default function PartiesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowCreate(false); setNewName(''); setCreateError('') }}
+                onClick={() => { setShowCreate(false); setNewName(''); setNewMode('curated'); setCreateError('') }}
                 className="btn-press shrink-0 rounded-full border border-[rgba(150,214,180,0.16)] px-3 py-2 text-xs font-bold text-[rgba(214,240,224,0.7)]"
               >
                 Cancel
@@ -91,22 +107,22 @@ export default function PartiesPage() {
             onClick={() => setShowCreate(true)}
             className="btn-press w-full rounded-[18px] border border-[rgba(216,168,74,0.26)] bg-[linear-gradient(135deg,rgba(216,168,74,0.16),rgba(45,212,143,0.08))] p-4 shadow-[inset_3px_0_0_rgba(216,168,74,0.48)] text-left"
           >
-            <p className="text-sm font-extrabold text-[#F7F1E4]">Start a party</p>
+            <p className="text-sm font-extrabold text-[#F7F1E4]">Start a group</p>
             <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.58)]">
-              Create a shared list and decide what to watch together.
+              Create a shared list your people can add to and vote on.
             </p>
           </button>
         )}
 
-        {/* Party list */}
+        {/* Group list */}
         <section>
-          <SectionTitle count={parties.length}>Your parties</SectionTitle>
+          <SectionTitle count={parties.length}>Your groups</SectionTitle>
           {loading ? (
             <p className="text-sm text-[rgba(214,240,224,0.4)]">Loading…</p>
           ) : parties.length === 0 ? (
             <div className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
               <EmptyState
-                title="No parties yet"
+                title="No groups yet"
                 body="Create one above or join via an invite link."
               />
             </div>
@@ -143,7 +159,7 @@ function PartyCard({ party, first, onClick }) {
       <div className="min-w-0">
         <p className="truncate text-sm font-bold text-[#F7F1E4]">{party.name}</p>
         <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.5)]">
-          {memberCount} {memberCount === 1 ? 'member' : 'members'}
+          {memberCount} {memberCount === 1 ? 'member' : 'members'} · {party.mode === 'rotating_picker' ? 'Rotating picker' : 'Curated list'}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

@@ -122,9 +122,9 @@ export default function FriendsPage() {
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-extrabold text-[#F7F1E4]">Parties</p>
+              <p className="text-sm font-extrabold text-[#F7F1E4]">Groups</p>
               <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.58)]">
-                Shared lists for watching together.
+                Shared lists for curating together.
               </p>
             </div>
             <svg className="shrink-0 text-[rgba(214,240,224,0.4)]" width="16" height="16" viewBox="0 0 24 24" fill="none">

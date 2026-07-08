@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { ScreenHeader } from '../lib/queuedDesign'
+import { Chip, MEDIA, MEDIA_ORDER, ScreenHeader } from '../lib/queuedDesign'
 import { InitialsAvatar } from '../components/Layout'
 import {
   addToPartyList,
@@ -17,6 +17,8 @@ import {
   inviteFriendToParty,
   pickItem,
 } from '../lib/parties'
+
+const GROUP_STATUS_LABELS = { unwatched: 'Active', picked: 'Chosen', watched: 'Done' }
 
 export default function PartyDetailPage() {
   const { partyId } = useParams()
@@ -40,7 +42,10 @@ export default function PartyDetailPage() {
   const [addingId, setAddingId] = useState(null)
   const [addError, setAddError] = useState('')
   const [pickError, setPickError] = useState('')
-  const [showWatched, setShowWatched] = useState(false)
+  const [showDone, setShowDone] = useState(false)
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [voteFilter, setVoteFilter] = useState('all')
 
   const uid = session?.user?.id
 
@@ -155,7 +160,7 @@ export default function PartyDetailPage() {
       await pickItem(itemId)
       await fetchParty()
     } catch (err) {
-      setPickError(err.message ?? 'Could not pick item')
+      setPickError(err.message ?? 'Could not choose item')
     } finally {
       setPickingId(null)
     }
@@ -210,18 +215,33 @@ export default function PartyDetailPage() {
 
   const members = party.party_members ?? []
   const allItems = party.party_list_items ?? []
-  const unwatched = allItems.filter(i => i.status === 'unwatched').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  const activeItems = allItems.filter(i => i.status !== 'watched').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const picked = allItems.filter(i => i.status === 'picked').sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const watched = allItems.filter(i => i.status === 'watched').sort((a, b) => new Date(b.watched_at) - new Date(a.watched_at))
-  const currentPicker = getCurrentPicker(members, watched.length)
-  const isMyTurn = currentPicker?.user_id === uid
   const activePick = picked[0] ?? null
   const activePicker = activePick ? members.find(m => m.user_id === activePick.picked_by) : null
   const canFinishActivePick = activePick?.picked_by === uid
+  const isRotatingPicker = party.mode === 'rotating_picker'
+  const currentPicker = isRotatingPicker ? getCurrentPicker(members, watched.length) : null
+  const isMyTurn = currentPicker?.user_id === uid
+  const filteredItems = activeItems.filter(item => {
+    if (typeFilter !== 'all' && item.media_type !== typeFilter) return false
+    if (statusFilter !== 'all' && item.status !== statusFilter) return false
+    if (voteFilter === 'liked' && !(item.party_votes ?? []).some(v => v.user_id === uid && v.vote === true)) return false
+    if (voteFilter === 'unvoted' && (item.party_votes ?? []).some(v => v.user_id === uid)) return false
+    return true
+  })
+  const summary = {
+    total: allItems.length,
+    active: activeItems.length,
+    liked: allItems.filter(i => (i.party_votes ?? []).some(v => v.user_id === uid && v.vote === true)).length,
+    done: watched.length,
+  }
+  const unwatched = filteredItems
 
   return (
     <div className="pb-5">
-      <ScreenHeader title={party.name} subtitle={`${members.length} ${members.length === 1 ? 'member' : 'members'}`} />
+      <ScreenHeader title={party.name} subtitle={`${members.length} ${members.length === 1 ? 'member' : 'members'} · ${isRotatingPicker ? 'Rotating picker' : 'Curated list'}`} />
 
       <div className="space-y-5 px-[18px]">
 
@@ -266,7 +286,7 @@ export default function PartyDetailPage() {
           <section className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)]">
             <div className="border-b border-[rgba(150,214,180,0.12)] px-4 py-3">
               <p className="text-sm font-bold text-[#F7F1E4]">Invite friends</p>
-              <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.45)]">Add accepted friends directly to this party.</p>
+              <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.45)]">Add accepted friends directly to this group.</p>
             </div>
             {inviteError && <p className="px-4 pt-3 text-xs text-rose-300">{inviteError}</p>}
             {inviteCandidates.length === 0 ? (
@@ -284,23 +304,29 @@ export default function PartyDetailPage() {
           </section>
         )}
 
-        {/* Rotation badge */}
-        {members.length > 1 && !activePick && (
+        <div className="grid grid-cols-4 gap-2">
+          <StatPill value={summary.total} label="Total" />
+          <StatPill value={summary.active} label="Active" />
+          <StatPill value={summary.liked} label="Liked" />
+          <StatPill value={summary.done} label="Done" />
+        </div>
+
+        {isRotatingPicker && members.length > 1 && !activePick && (
           <div className="rounded-[14px] border border-[rgba(216,168,74,0.2)] bg-[rgba(216,168,74,0.08)] px-4 py-2.5">
             {isMyTurn ? (
-              <p className="text-sm font-bold text-[#D8A84A]">Your pick — choose something from the list below</p>
+              <p className="text-sm font-bold text-[#D8A84A]">Your turn to choose from the group list</p>
             ) : (
               <p className="text-sm text-[rgba(214,240,224,0.6)]">
                 <span className="font-bold text-[#F7F1E4]">
                   {currentPicker?.user?.display_name || currentPicker?.user?.username || 'Someone'}
                 </span>
-                {' '}is picking next
+                {' '}chooses next
               </p>
             )}
           </div>
         )}
 
-        {activePick && (
+        {isRotatingPicker && activePick && (
           <WinnerCard
             item={activePick}
             pickerName={activePicker?.user?.display_name || activePicker?.user?.username || 'Someone'}
@@ -321,7 +347,7 @@ export default function PartyDetailPage() {
         <section>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-[rgba(214,240,224,0.45)]">
-              Up for grabs · {unwatched.length}
+              Group list · {unwatched.length}
             </p>
             <button
               type="button"
@@ -335,9 +361,15 @@ export default function PartyDetailPage() {
             </button>
           </div>
 
+          <div className="mb-3 space-y-2">
+            <ChipRow value={typeFilter} onChange={setTypeFilter} options={[{ value: 'all', label: 'All' }, ...MEDIA_ORDER.map(type => ({ value: type, label: MEDIA[type].label }))]} />
+            <ChipRow value={statusFilter} onChange={setStatusFilter} options={[{ value: 'all', label: 'All' }, { value: 'unwatched', label: 'Active' }, { value: 'picked', label: 'Chosen' }]} />
+            <ChipRow value={voteFilter} onChange={setVoteFilter} options={[{ value: 'all', label: 'All' }, { value: 'liked', label: 'Liked by you' }, { value: 'unvoted', label: 'No vote yet' }]} />
+          </div>
+
           {unwatched.length === 0 ? (
             <div className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-6 text-center">
-              <p className="text-sm text-[rgba(214,240,224,0.4)]">Nothing on the list yet. Add something!</p>
+              <p className="text-sm text-[rgba(214,240,224,0.4)]">Nothing matches these filters yet.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -347,10 +379,10 @@ export default function PartyDetailPage() {
                   item={item}
                   members={members}
                   uid={uid}
-                  canPick={isMyTurn && !activePick}
-                  pickingId={pickingId}
                   votingId={votingId}
                   onVote={handleVote}
+                  canPick={isRotatingPicker && isMyTurn && !activePick}
+                  pickingId={pickingId}
                   onPick={handlePick}
                 />
               ))}
@@ -362,7 +394,7 @@ export default function PartyDetailPage() {
         {showAdd && (
           <section className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] overflow-hidden">
             <div className="flex items-center justify-between border-b border-[rgba(150,214,180,0.12)] px-4 py-3">
-              <p className="text-sm font-bold text-[#F7F1E4]">Add to party list</p>
+              <p className="text-sm font-bold text-[#F7F1E4]">Add to group list</p>
               <button
                 type="button"
                 onClick={() => { setShowAdd(false); setAddError('') }}
@@ -422,28 +454,28 @@ export default function PartyDetailPage() {
           </section>
         )}
 
-        {/* Watched history */}
-        {watched.length > 0 && (
+        {/* Done history */}
+        {isRotatingPicker && watched.length > 0 && (
           <section>
             <button
               type="button"
-              onClick={() => setShowWatched(v => !v)}
+              onClick={() => setShowDone(v => !v)}
               className="mb-2 flex w-full items-center justify-between"
             >
               <p className="text-xs font-bold uppercase tracking-wider text-[rgba(214,240,224,0.45)]">
-                Watched · {watched.length}
+                Done · {watched.length}
               </p>
               <svg
                 width="14"
                 height="14"
                 viewBox="0 0 24 24"
                 fill="none"
-                className={`text-[rgba(214,240,224,0.4)] transition-transform ${showWatched ? 'rotate-180' : ''}`}
+                className={`text-[rgba(214,240,224,0.4)] transition-transform ${showDone ? 'rotate-180' : ''}`}
               >
                 <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            {showWatched && (
+            {showDone && (
               <div className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)]">
                 {watched.map((item, i) => {
                   const picker = members.find(m => m.user_id === item.picked_by)
@@ -460,7 +492,7 @@ export default function PartyDetailPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-[rgba(247,241,228,0.7)]">{item.media_title}</p>
-                        <p className="text-[11px] text-[rgba(214,240,224,0.4)]">Picked by {pickerName}</p>
+                        <p className="text-[11px] text-[rgba(214,240,224,0.4)]">Marked done by {pickerName}</p>
                       </div>
                       <span className="shrink-0 text-[10px] font-bold text-[#2DD48F]">✓</span>
                     </div>
@@ -475,7 +507,7 @@ export default function PartyDetailPage() {
   )
 }
 
-function PartyListItem({ item, members, uid, canPick, pickingId, votingId, onVote, onPick }) {
+function PartyListItem({ item, members, uid, votingId, onVote, canPick = false, pickingId, onPick }) {
   const votes = item.party_votes ?? []
   const upvotes = votes.filter(v => v.vote === true)
   const myVote = votes.find(v => v.user_id === uid)
@@ -553,29 +585,22 @@ function PartyListItem({ item, members, uid, canPick, pickingId, votingId, onVot
           )}
         </div>
 
-        {/* Pick buttons */}
-        <div className="flex items-center gap-2">
-          {canPick && majorityReached && (
-            <button
-              type="button"
-              disabled={isPicking}
-              onClick={() => onPick(item.id)}
-              className="btn-press rounded-full bg-[#2DD48F] px-4 py-1.5 text-xs font-extrabold text-[#052016] disabled:opacity-50"
-            >
-              {isPicking ? '…' : 'Pick this'}
-            </button>
-          )}
-          {canPick && !majorityReached && (
-            <button
-              type="button"
-              disabled={isPicking}
-              onClick={() => onPick(item.id)}
-              className="btn-press rounded-full border border-[rgba(216,168,74,0.4)] bg-[rgba(216,168,74,0.12)] px-4 py-1.5 text-xs font-extrabold text-[#D8A84A] disabled:opacity-50"
-            >
-              {isPicking ? '…' : 'My pick'}
-            </button>
-          )}
-        </div>
+        {canPick ? (
+          <button
+            type="button"
+            disabled={isPicking}
+            onClick={() => onPick(item.id)}
+            className={`btn-press rounded-full px-4 py-1.5 text-xs font-extrabold disabled:opacity-50 ${
+              majorityReached
+                ? 'bg-[#2DD48F] text-[#052016]'
+                : 'border border-[rgba(216,168,74,0.4)] bg-[rgba(216,168,74,0.12)] text-[#D8A84A]'
+            }`}
+          >
+            {isPicking ? 'Choosing...' : majorityReached ? 'Choose this' : 'My choice'}
+          </button>
+        ) : (
+          <span className="text-[11px] font-semibold text-[rgba(214,240,224,0.35)]">{GROUP_STATUS_LABELS[item.status] || 'Active'}</span>
+        )}
       </div>
     </div>
   )
@@ -585,7 +610,7 @@ function WinnerCard({ item, pickerName, canFinish, finishing, onFinish }) {
   return (
     <section className="overflow-hidden rounded-[18px] border border-[rgba(216,168,74,0.32)] bg-[rgba(216,168,74,0.1)]">
       <div className="border-b border-[rgba(216,168,74,0.16)] px-4 py-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-[#D8A84A]">Winner</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-[#D8A84A]">Chosen</p>
       </div>
       <div className="flex items-center gap-3 px-4 py-4">
         {item.media_poster_url ? (
@@ -596,7 +621,7 @@ function WinnerCard({ item, pickerName, canFinish, finishing, onFinish }) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-extrabold text-[#F7F1E4]">{item.media_title}</p>
           {item.media_creator && <p className="truncate text-xs text-[rgba(214,240,224,0.55)]">{item.media_creator}</p>}
-          <p className="mt-1 text-[11px] text-[rgba(214,240,224,0.45)]">Picked by {pickerName}</p>
+          <p className="mt-1 text-[11px] text-[rgba(214,240,224,0.45)]">Chosen by {pickerName}</p>
         </div>
         {canFinish ? (
           <button
@@ -605,16 +630,29 @@ function WinnerCard({ item, pickerName, canFinish, finishing, onFinish }) {
             onClick={onFinish}
             className="btn-press shrink-0 rounded-full bg-[#F4E9D1] px-4 py-2 text-xs font-extrabold text-[#052016] disabled:opacity-50"
           >
-            {finishing ? 'Saving...' : 'Finished'}
+            {finishing ? 'Saving...' : 'Mark done'}
           </button>
         ) : (
           <span className="shrink-0 rounded-full border border-[rgba(216,168,74,0.24)] px-3 py-1.5 text-xs font-bold text-[#D8A84A]">
-            Picked
+            Chosen
           </span>
         )}
       </div>
     </section>
   )
+}
+
+function StatPill({ value, label }) {
+  return (
+    <div className="rounded-[13px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-2 py-3 text-center">
+      <p className="font-mono-q text-lg font-semibold leading-none text-[#F7F1E4]">{value}</p>
+      <p className="mt-1 text-[9.5px] font-bold uppercase leading-tight text-[rgba(214,240,224,0.5)]">{label}</p>
+    </div>
+  )
+}
+
+function ChipRow({ options, value, onChange }) {
+  return <div className="scrollbar-none flex gap-2 overflow-x-auto">{options.map(option => <Chip key={option.value} active={value === option.value} onClick={() => onChange(option.value)}>{option.label}</Chip>)}</div>
 }
 
 function AddItem({ item, addingId, onAdd, badge }) {

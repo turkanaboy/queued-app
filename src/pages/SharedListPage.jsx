@@ -11,7 +11,7 @@ import { displayRating } from '../lib/ratings'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const STATUS_LABELS = { all: 'All', not_yet_viewed: 'New', queued: 'Queued', in_progress: 'Watching', finished: 'Finished', skipped: 'Skipped', bailed: 'Bailed' }
+const STATUS_LABELS = { all: 'All', not_yet_viewed: 'New', queued: 'Queued', in_progress: 'In progress', finished: 'Finished', skipped: 'Skipped', bailed: 'Bailed' }
 
 export default function SharedListPage() {
   const { friendId } = useParams()

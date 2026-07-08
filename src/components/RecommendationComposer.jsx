@@ -232,7 +232,7 @@ export function ProviderRows({ providers, title, creator, mediaType, compact = f
   }
   const { flatrate = [], rent = [], buy = [], link: jwLink } = providers
   const hasAny = flatrate.length || rent.length || buy.length
-  if (!hasAny) return jwLink ? <a href={jwLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[rgba(214,240,224,0.5)] underline">Find where to watch</a> : null
+  if (!hasAny) return jwLink ? <a href={jwLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[rgba(214,240,224,0.5)] underline">Find options</a> : null
   return (
     <div className={`space-y-1.5 ${compact ? '' : 'mt-2'}`}>
       {flatrate.length > 0 && <ProviderSection label="Stream" providers={flatrate} title={title} jwLink={jwLink} myPlatforms={myPlatforms} isStream />}

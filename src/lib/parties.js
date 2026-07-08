@@ -32,8 +32,8 @@ export function clearStoredPartyInvite() {
 
 // ── Party CRUD ────────────────────────────────────────────────
 
-export async function createParty(name) {
-  const { data: partyId, error: rpcError } = await supabase.rpc('create_party', { p_name: name })
+export async function createParty(name, mode = 'curated') {
+  const { data: partyId, error: rpcError } = await supabase.rpc('create_party', { p_name: name, p_mode: mode })
   if (rpcError) throw rpcError
   const { data, error } = await supabase.from('parties').select('*').eq('id', partyId).single()
   if (error) throw error
@@ -159,7 +159,7 @@ export async function getPartyInviteCandidates(partyId, userId) {
 
 // ── Queue & overlap ───────────────────────────────────────────
 
-// Everything from the user's log (any status) that isn't already on the party list.
+// Everything from the user's log (any status) that isn't already on the group list.
 export async function getMyLogItems(partyId, userId) {
   const { data: listed } = await supabase
     .from('party_list_items')

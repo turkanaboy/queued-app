@@ -127,7 +127,7 @@ export default function SetupPage() {
             <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-1">
               Your streaming platforms
             </label>
-            <p className="text-white/40 text-xs mb-3">So friends know what you can watch</p>
+            <p className="text-white/40 text-xs mb-3">So friends know what you can enjoy</p>
             <div className="flex flex-wrap gap-2">
               {PLATFORMS.map(p => {
                 const active = selectedPlatforms.includes(p.id)
