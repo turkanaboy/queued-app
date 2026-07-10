@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { InitialsAvatar } from '../components/Layout'
 import { ProviderRows } from '../components/RecommendationComposer'
-import { upsertMediaLog } from '../lib/mediaLog'
+import { setRecommendationState } from '../lib/mediaLog'
 import { Chip, C, EmptyState, MEDIA, MEDIA_ORDER, PosterTile, ScreenHeader, STATUS_ORDER, StatusMenu } from '../lib/queuedDesign'
 import { displayRating } from '../lib/ratings'
 
@@ -23,11 +23,13 @@ export default function SharedListPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dirFilter, setDirFilter] = useState('all')
+  const [error, setError] = useState('')
 
   useEffect(() => { fetchFriend(); fetchRecs() }, [friendId, session])
 
   async function fetchFriend() {
-    const { data } = await supabase.from('users').select('id, username, display_name').eq('id', friendId).single()
+    const { data, error: fetchError } = await supabase.from('users').select('id, username, display_name').eq('id', friendId).single()
+    if (fetchError) { setError(fetchError.message); return }
     setFriend(data)
   }
 
@@ -35,61 +37,55 @@ export default function SharedListPage() {
     setLoading(true)
     const uid = session.user.id
     if (!UUID_RE.test(friendId)) { setRecs([]); setLoading(false); return }
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('recommendations')
-      .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name)')
+      .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name), comments(id,author_id,body,created_at,author:users!comments_author_id_fkey(id,username,display_name))')
       .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
+    if (fetchError) {
+      setError(fetchError.message)
+      setLoading(false)
+      return
+    }
     setRecs(data ?? [])
     setLoading(false)
   }
 
-  async function syncRecommendationToLog(rec, status, rating = rec.rating ?? null) {
-    if (!rec || rec.recipient_id !== session.user.id) return
-    if (status === 'not_yet_viewed' || status === 'skipped') return
-    await upsertMediaLog({
-      user_id: session.user.id,
-      media_type: rec.media_type,
-      media_id: rec.media_id,
-      media_title: rec.media_title,
-      media_creator: rec.media_creator ?? null,
-      media_poster_url: rec.media_poster_url,
-      rating,
-      status,
-      source_type: 'recommendation',
-      source_user_id: rec.sender_id,
-    })
-  }
-
   async function updateStatus(recId, status, rec) {
-    await supabase.from('recommendations').update({ recipient_status: status }).eq('id', recId)
-    await syncRecommendationToLog(rec, status)
+    setError('')
+    const { error: updateError } = await setRecommendationState(recId, {
+      status,
+      rating: status === 'finished' ? rec.rating ?? null : null,
+    })
+    if (updateError) { setError(updateError.message); return }
     fetchRecs()
   }
 
-  async function updateRating(recId, rating, rec) {
-    await supabase.from('recommendations').update({ rating }).eq('id', recId)
-    if (rec && rating) {
-      await upsertMediaLog({
-        user_id: session.user.id,
-        media_type: rec.media_type,
-        media_id: rec.media_id,
-        media_title: rec.media_title,
-        media_creator: rec.media_creator ?? null,
-        media_poster_url: rec.media_poster_url,
-        rating,
-        status: 'finished',
-        source_type: 'recommendation',
-        source_user_id: rec.sender_id,
-      })
-    }
+  async function updateRating(recId, rating) {
+    setError('')
+    const { error: updateError } = await setRecommendationState(recId, { status: 'finished', rating })
+    if (updateError) { setError(updateError.message); return }
     fetchRecs()
   }
 
   async function softDelete(recId) {
-    await supabase.from('recommendations').update({ deleted_at: new Date().toISOString() }).eq('id', recId)
+    setError('')
+    const { error: deleteError } = await supabase.from('recommendations').update({ deleted_at: new Date().toISOString() }).eq('id', recId)
+    if (deleteError) { setError(deleteError.message); return }
     fetchRecs()
+  }
+
+  async function addComment(recId, body) {
+    setError('')
+    const { error: commentError } = await supabase.from('comments').insert({
+      recommendation_id: recId,
+      author_id: session.user.id,
+      body: body.trim(),
+    })
+    if (commentError) { setError(commentError.message); return false }
+    await fetchRecs()
+    return true
   }
 
   const uid = session.user.id
@@ -114,11 +110,12 @@ export default function SharedListPage() {
         eyebrow="Shared list"
         title={friend?.display_name || friend?.username || 'Friend'}
         subtitle={friend ? `@${friend.username}` : null}
-        back={<button onClick={() => navigate(-1)} className="btn-press flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-xl text-[#F4E9D1]">←</button>}
+        back={<button aria-label="Go back" onClick={() => navigate(-1)} className="btn-press flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-xl text-[#F4E9D1]">←</button>}
         right={friend && <InitialsAvatar name={friend.display_name || friend.username} size="md" />}
       />
 
       <div className="space-y-5 px-[18px]">
+        {error && <p role="alert" className="rounded-[14px] border border-rose-300/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300">{error}</p>}
         <div className="grid grid-cols-4 gap-2">
           <StatPill value={summary.total} label="Total" />
           <StatPill value={summary.finished} label="Finished" color={C.mint} />
@@ -146,8 +143,9 @@ export default function SharedListPage() {
                 friend={friend}
                 myPlatforms={profile?.platforms ?? []}
                 onStatusChange={(status) => updateStatus(rec.id, status, rec)}
-                onRatingChange={(rating) => updateRating(rec.id, rating, rec)}
+                onRatingChange={(rating) => updateRating(rec.id, rating)}
                 onDelete={() => softDelete(rec.id)}
+                onComment={(body) => addComment(rec.id, body)}
               />
             ))}
           </div>
@@ -170,9 +168,21 @@ function ChipRow({ options, value, onChange }) {
   return <div className="scrollbar-none flex gap-2 overflow-x-auto">{options.map(option => <Chip key={option.value} active={value === option.value} onClick={() => onChange(option.value)}>{option.label}</Chip>)}</div>
 }
 
-function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange, onRatingChange, onDelete }) {
+function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange, onRatingChange, onDelete, onComment }) {
   const fromThem = rec.sender_id !== currentUserId
   const name = fromThem ? (friend?.display_name || friend?.username || 'them') : 'you'
+  const [comment, setComment] = useState('')
+  const [commenting, setCommenting] = useState(false)
+  const comments = [...(rec.comments ?? [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+
+  async function submitComment(event) {
+    event.preventDefault()
+    if (!comment.trim()) return
+    setCommenting(true)
+    const saved = await onComment(comment)
+    if (saved) setComment('')
+    setCommenting(false)
+  }
   return (
     <article className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-3" style={{ boxShadow: `inset 3px 0 0 ${fromThem ? 'rgba(216,168,74,0.55)' : 'rgba(184,115,51,0.62)'}` }}>
       <div className="flex gap-3">
@@ -183,7 +193,13 @@ function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange
               <p className="truncate text-sm font-extrabold text-[#F7F1E4]">{rec.media_title}</p>
               <p className="truncate text-[11.5px] text-[rgba(214,240,224,0.5)]">{rec.media_creator || MEDIA[rec.media_type]?.label}</p>
             </div>
-            <StatusMenu value={rec.recipient_status} onChange={onStatusChange} />
+            {fromThem ? (
+              <StatusMenu value={rec.recipient_status} onChange={onStatusChange} />
+            ) : (
+              <span className="rounded-full border border-[rgba(150,214,180,0.16)] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[rgba(214,240,224,0.5)]">
+                {STATUS_LABELS[rec.recipient_status] || 'New'}
+              </span>
+            )}
           </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-[rgba(214,240,224,0.6)]">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: fromThem ? C.gold : C.brass }} />
@@ -197,6 +213,20 @@ function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange
             {fromThem && rec.recipient_status === 'finished' && <RatingButtons value={rec.rating} onChange={onRatingChange} />}
             {!fromThem && <button onClick={onDelete} className="btn-press text-xs font-semibold text-[rgba(214,240,224,0.35)]">Unsend</button>}
           </div>
+          {comments.length > 0 && (
+            <div className="mt-3 max-h-32 space-y-1.5 overflow-y-auto border-t border-[rgba(150,214,180,0.12)] pt-2.5">
+              {comments.map(entry => (
+                <p key={entry.id} className="text-xs leading-relaxed text-[rgba(214,240,224,0.7)]">
+                  <span className="font-bold text-[#F7F1E4]">{entry.author?.display_name || entry.author?.username || 'Member'}:</span> {entry.body}
+                </p>
+              ))}
+            </div>
+          )}
+          <form onSubmit={submitComment} className="mt-2 flex gap-2">
+            <label className="sr-only" htmlFor={`comment-${rec.id}`}>Add a comment</label>
+            <input id={`comment-${rec.id}`} value={comment} maxLength={1000} onChange={event => setComment(event.target.value)} placeholder="Add a comment" className="input-glass min-w-0 flex-1 py-2 text-xs" />
+            <button type="submit" disabled={commenting || !comment.trim()} className="btn-press rounded-full border border-[rgba(150,214,180,0.2)] px-3 py-1.5 text-xs font-bold disabled:opacity-40">Send</button>
+          </form>
         </div>
       </div>
     </article>
@@ -204,5 +234,5 @@ function SharedRecCard({ rec, currentUserId, friend, myPlatforms, onStatusChange
 }
 
 function RatingButtons({ value, onChange }) {
-  return <div className="flex gap-1">{[1, 2, 3, 4, 5].map(n => <button key={n} onClick={() => onChange(n)} className={`btn-press text-sm ${value && n <= value ? 'text-[#D8A84A]' : 'text-white/20'}`}>★</button>)}</div>
+  return <div className="flex gap-1" aria-label="Rating">{[1, 2, 3, 4, 5].map(n => <button key={n} aria-label={`${n} stars`} onClick={() => onChange(n)} className={`btn-press min-h-10 min-w-8 text-sm ${value && n <= value ? 'text-[#D8A84A]' : 'text-white/20'}`}>★</button>)}</div>
 }

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 export const C = {
   cream: '#F4E9D1',
@@ -125,7 +125,7 @@ export function SearchField({ value, onChange, placeholder, autoFocus = false })
       <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none">
         <circle cx="11" cy="11" r="8" stroke={C.cream} strokeWidth="2"/><path d="m21 21-4.35-4.35" stroke={C.cream} strokeWidth="2" strokeLinecap="round"/>
       </svg>
-      <input autoFocus={autoFocus} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      <input type="search" aria-label={placeholder || 'Search'} autoFocus={autoFocus} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         className="w-full rounded-[14px] border-[1.5px] border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] py-3 pl-10 pr-3.5 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
     </div>
   )
@@ -162,8 +162,8 @@ export function StatusMenu({ value, onChange, align = 'right' }) {
   const [open, setOpen] = useState(false)
   const status = STATUS[value] || STATUS.queued
   return (
-    <div className="relative">
-      <button type="button" onClick={() => setOpen(v => !v)}
+    <div className="relative" onKeyDown={event => { if (event.key === 'Escape') setOpen(false) }}>
+      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
         className="font-mono-q btn-press inline-flex items-center gap-1.5 rounded-full border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.55)] px-2.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.3px] text-[#F7F1E4]">
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: status.dot }} />
         {status.short}
@@ -172,9 +172,9 @@ export function StatusMenu({ value, onChange, align = 'right' }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-[calc(100%+6px)] z-50 min-w-[150px] rounded-[14px] border border-[#F4E9D1]/25 bg-[rgba(6,30,21,0.98)] p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.5)] backdrop-blur ${align === 'left' ? 'left-0' : 'right-0'}`}>
+          <div role="menu" className={`absolute top-[calc(100%+6px)] z-50 min-w-[150px] rounded-[14px] border border-[#F4E9D1]/25 bg-[rgba(6,30,21,0.98)] p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.5)] backdrop-blur ${align === 'left' ? 'left-0' : 'right-0'}`}>
             {STATUS_ORDER.map(key => (
-              <button key={key} type="button" onClick={() => { onChange(key); setOpen(false) }}
+              <button key={key} type="button" role="menuitemradio" aria-checked={key === value} onClick={() => { onChange(key); setOpen(false) }}
                 className={`flex w-full items-center gap-2 rounded-[9px] px-2.5 py-2 text-left text-[13px] font-semibold text-[#F7F1E4] ${key === value ? 'bg-[#F4E9D1]/10' : ''}`}>
                 <span className="h-[7px] w-[7px] rounded-full" style={{ background: STATUS[key].dot }} />
                 {STATUS[key].label}
@@ -202,19 +202,55 @@ export function EmptyState({ title, body, action }) {
 }
 
 export function SheetShell({ children, onClose, title, footer, size = 'default' }) {
+  const dialogRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  const titleId = useId()
   const sizeClass = size === 'peek'
     ? 'max-h-[60dvh] overflow-y-auto'
     : ''
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    const previousFocus = document.activeElement
+    const dialog = dialogRef.current
+    const focusable = dialog?.querySelector('button, input, textarea, select, a[href]')
+    ;(focusable || dialog)?.focus()
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !dialog) return
+      const controls = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]')]
+      if (!controls.length) return
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus?.()
+    }
+  }, [])
+
   return (
     <>
       <div className="fixed inset-0 z-30 bg-[rgba(2,10,7,0.55)] backdrop-blur-[2px]" style={{ animation: 'qFade .2s ease' }} onClick={onClose} />
       <div className="fixed inset-0 z-40 flex items-end justify-center pointer-events-none">
-        <div className={`pointer-events-auto w-full max-w-[430px] rounded-t-[26px] border-t border-[#F4E9D1]/25 bg-[linear-gradient(180deg,#0a3526,#062318)] px-[18px] pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.5)] ${sizeClass}`} style={{ animation: 'qUp .28s cubic-bezier(0.16,1,0.3,1)' }}>
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : 'Dialog'} tabIndex={-1} className={`pointer-events-auto w-full max-w-[430px] rounded-t-[26px] border-t border-[#F4E9D1]/25 bg-[linear-gradient(180deg,#0a3526,#062318)] px-[18px] pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.5)] ${sizeClass}`} style={{ animation: 'qUp .28s cubic-bezier(0.16,1,0.3,1)' }}>
           <div className="mx-auto mb-3.5 h-1 w-[38px] rounded-full bg-[#F4E9D1]/25" />
           {title && (
             <div className="mb-3.5 flex items-center justify-between">
-              <h2 className="text-[17px] font-extrabold text-[#F7F1E4]">{title}</h2>
-              <button onClick={onClose} className="btn-press p-1 text-xl leading-none text-[rgba(214,240,224,0.5)]">×</button>
+              <h2 id={titleId} className="text-[17px] font-extrabold text-[#F7F1E4]">{title}</h2>
+              <button type="button" aria-label="Close dialog" onClick={onClose} className="btn-press min-h-10 min-w-10 p-1 text-xl leading-none text-[rgba(214,240,224,0.5)]">×</button>
             </div>
           )}
           {children}

@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.107.0'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -7,6 +7,8 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!
 const OTDB_BASE = 'https://opentdb.com/api.php'
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages'
 const CLAUDE_MODEL = 'claude-haiku-4-5'
+const MEDIA_TYPES = new Set(['movie', 'tv', 'book', 'album', 'game'])
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,21 +22,12 @@ function json(data: unknown, status = 200) {
   })
 }
 
-// ── Levenshtein (used server-side for Q11 scoring too) ───────
-// Kept here for self-containment; submit-trivia duplicates it.
-function levenshtein(a: string, b: string): number {
-  const m = a.length, n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-  )
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-  return dp[m][n]
+function isBoundedString(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
 }
 
+// ── Levenshtein (used server-side for Q11 scoring too) ───────
+// Kept here for self-containment; submit-trivia duplicates it.
 // ── Claude call helper ────────────────────────────────────────
 async function callClaude(systemPrompt: string, userMessage: string): Promise<string> {
   const res = await fetch(CLAUDE_API, {
@@ -50,6 +43,7 @@ async function callClaude(systemPrompt: string, userMessage: string): Promise<st
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     }),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -118,7 +112,18 @@ Rules:
       const parsed = JSON.parse(cleaned)
       if (!Array.isArray(parsed) || parsed.length !== pool.length) return null
       for (const q of parsed) {
-        if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || typeof q.correct_index !== 'number') return null
+        if (
+          q.type !== 'multiple_choice' ||
+          !isBoundedString(q.question, 300) ||
+          !Array.isArray(q.options) ||
+          q.options.length !== 4 ||
+          !q.options.every((option: unknown) => isBoundedString(option, 160)) ||
+          !Number.isInteger(q.correct_index) ||
+          q.correct_index < 0 ||
+          q.correct_index > 3 ||
+          (q.media_title !== null && !isBoundedString(q.media_title, 200)) ||
+          (q.media_type !== null && !MEDIA_TYPES.has(q.media_type))
+        ) return null
       }
       return parsed
     } catch {
@@ -193,10 +198,12 @@ Example: if the answer is "The Dark Knight", accepted_answers should be ["dark k
       const parsed = JSON.parse(cleaned)
       if (
         parsed.type !== 'fill_in_blank' ||
-        !parsed.question ||
+        !isBoundedString(parsed.question, 300) ||
         !Array.isArray(parsed.accepted_answers) ||
         parsed.accepted_answers.length === 0 ||
-        !parsed.correct_display ||
+        parsed.accepted_answers.length > 6 ||
+        !parsed.accepted_answers.every((answer: unknown) => isBoundedString(answer, 100)) ||
+        !isBoundedString(parsed.correct_display, 200) ||
         parsed.points !== 3
       ) return null
       return parsed
@@ -221,7 +228,7 @@ Example: if the answer is "The Dark Knight", accepted_answers should be ["dark k
 // ── OTDB fetch for random mode ────────────────────────────────
 async function fetchOTDBQuestions(count: number): Promise<MultipleChoiceQuestion[]> {
   const url = `${OTDB_BASE}?amount=${count}&type=multiple&encode=url3986`
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
   if (!res.ok) throw new Error(`OTDB fetch failed: ${res.status}`)
   const data = await res.json()
   if (data.response_code !== 0 || !Array.isArray(data.results)) {
@@ -258,18 +265,19 @@ function buildBalancedPool(
   challengerLog: LogEntry[],
   targetCount: number
 ): { pool: MediaItem[]; allTitles: string[] } {
-  const challengerById = new Map(challengerLog.map(e => [e.media_id, e]))
+  const mediaKey = (entry: LogEntry) => `${entry.media_type}:${entry.media_id}`
+  const challengerById = new Map(challengerLog.map(e => [mediaKey(e), e]))
   const shared: LogEntry[] = []
   const initiatorOnly: LogEntry[] = []
   const challengerOnly: LogEntry[] = []
 
   for (const entry of initiatorLog) {
-    if (challengerById.has(entry.media_id)) shared.push(entry)
+    if (challengerById.has(mediaKey(entry))) shared.push(entry)
     else initiatorOnly.push(entry)
   }
-  const sharedIds = new Set(shared.map(e => e.media_id))
+  const sharedIds = new Set(shared.map(mediaKey))
   for (const entry of challengerLog) {
-    if (!sharedIds.has(entry.media_id)) challengerOnly.push(entry)
+    if (!sharedIds.has(mediaKey(entry))) challengerOnly.push(entry)
   }
 
   const sharedShuffled = shuffleArray(shared)
@@ -352,6 +360,12 @@ serve(async (req) => {
   if (!['balanced', 'my_media', 'random'].includes(mode)) {
     return json({ error: 'mode must be balanced, my_media, or random' }, 400)
   }
+  if (!UUID_RE.test(initiator_id) || !UUID_RE.test(challenger_id)) {
+    return json({ error: 'initiator_id and challenger_id must be UUIDs' }, 400)
+  }
+  if (!Array.isArray(media_types) || media_types.length > MEDIA_TYPES.size || media_types.some(type => !MEDIA_TYPES.has(type))) {
+    return json({ error: 'media_types contains an unsupported value' }, 400)
+  }
 
   // Auth: verify bearer token belongs to initiator_id
   const authHeader = req.headers.get('Authorization') ?? ''
@@ -377,25 +391,26 @@ serve(async (req) => {
   const [pairA, pairB] = initiator_id < challenger_id
     ? [initiator_id, challenger_id]
     : [challenger_id, initiator_id]
-  const { data: friendship } = await supabase
+  const { data: friendship, error: friendshipError } = await supabase
     .from('friendships')
     .select('id')
     .eq('user_a_id', pairA)
     .eq('user_b_id', pairB)
     .eq('status', 'accepted')
     .maybeSingle()
+  if (friendshipError) return json({ error: friendshipError.message }, 500)
   if (!friendship) {
     return json({ error: 'you can only challenge accepted friends' }, 403)
   }
 
-  // Rate limit: each generation spends Claude tokens, so cap challenges per hour.
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-  const { count: recentCount } = await supabase
-    .from('trivia_challenges')
-    .select('*', { count: 'exact', head: true })
-    .eq('initiator_id', initiator_id)
-    .gte('created_at', oneHourAgo)
-  if ((recentCount ?? 0) >= 10) {
+  const { data: allowed, error: limitError } = await supabase.rpc('consume_edge_rate_limit', {
+    p_user_id: initiator_id,
+    p_action: 'trivia_generate',
+    p_limit: 10,
+    p_window_seconds: 3600,
+  })
+  if (limitError) return json({ error: limitError.message }, 500)
+  if (!allowed) {
     return json({ error: 'Too many challenges in the last hour — try again later.' }, 429)
   }
 
@@ -412,22 +427,25 @@ serve(async (req) => {
       // Fetch logs
       const mediaTypeFilter = media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game']
 
-      const { data: initiatorLog } = await supabase
-        .from('user_media_log')
-        .select('media_id, media_title, media_creator, media_type')
-        .eq('user_id', initiator_id)
-        .in('status', ['finished', 'in_progress'])
-        .in('media_type', mediaTypeFilter)
+      const [initiatorLogResult, challengerLogResult] = await Promise.all([
+        supabase
+          .from('user_media_log')
+          .select('media_id, media_title, media_creator, media_type')
+          .eq('user_id', initiator_id)
+          .in('status', ['finished', 'in_progress'])
+          .in('media_type', mediaTypeFilter),
+        supabase
+          .from('user_media_log')
+          .select('media_id, media_title, media_creator, media_type')
+          .eq('user_id', challenger_id)
+          .in('status', ['finished', 'in_progress'])
+          .in('media_type', mediaTypeFilter),
+      ])
+      if (initiatorLogResult.error) throw initiatorLogResult.error
+      if (challengerLogResult.error) throw challengerLogResult.error
 
-      const { data: challengerLog } = await supabase
-        .from('user_media_log')
-        .select('media_id, media_title, media_creator, media_type')
-        .eq('user_id', challenger_id)
-        .in('status', ['finished', 'in_progress'])
-        .in('media_type', mediaTypeFilter)
-
-      const iLog = (initiatorLog ?? []) as LogEntry[]
-      const cLog = (challengerLog ?? []) as LogEntry[]
+      const iLog = (initiatorLogResult.data ?? []) as LogEntry[]
+      const cLog = (challengerLogResult.data ?? []) as LogEntry[]
 
       // Build pool of 10 items for Q1–Q10
       let pool: MediaItem[]
@@ -464,33 +482,19 @@ serve(async (req) => {
       return rest
     })
 
-    const { data: challenge, error: insertError } = await supabase
-      .from('trivia_challenges')
-      .insert({
-        initiator_id,
-        challenger_id,
-        mode,
-        media_types: media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game'],
-        status: 'pending_initiator',
-        questions: sanitizedQuestions,
-      })
-      .select('id')
-      .single()
-
-    if (insertError || !challenge) {
-      return json({ error: insertError?.message ?? 'Failed to insert challenge' }, 500)
-    }
-
-    const { error: keyError } = await supabase.rpc('store_trivia_answer_key', {
-      p_challenge_id: challenge.id,
-      p_questions: questions,
+    const { data: challengeId, error: insertError } = await supabase.rpc('create_trivia_challenge', {
+      p_initiator_id: initiator_id,
+      p_challenger_id: challenger_id,
+      p_mode: mode,
+      p_media_types: media_types.length > 0 ? media_types : ['movie', 'tv', 'book', 'album', 'game'],
+      p_public_questions: sanitizedQuestions,
+      p_answer_key: questions,
     })
-    if (keyError) {
-      await supabase.from('trivia_challenges').delete().eq('id', challenge.id)
-      return json({ error: `Failed to store answer key: ${keyError.message}` }, 500)
+    if (insertError || !challengeId) {
+      return json({ error: insertError?.message ?? 'Failed to create challenge' }, 500)
     }
 
-    return json({ challenge_id: challenge.id })
+    return json({ challenge_id: challengeId })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return json({ error: message }, 500)

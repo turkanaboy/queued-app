@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -21,6 +21,7 @@ export default function FriendsPage() {
   const [inviteStatus, setInviteStatus] = useState('')
   const [friendError, setFriendError] = useState('')
   const [triviaSheetOpen, setTriviaSheetOpen] = useState(false)
+  const searchRequestRef = useRef(0)
 
   const { pendingChallenges, waitingChallenges } = useTriviaChallenges()
   const uid = session?.user?.id
@@ -29,10 +30,16 @@ export default function FriendsPage() {
 
   async function fetchFriendships() {
     const uid = session.user.id
-    const { data } = await supabase
+    setFriendError('')
+    const { data, error } = await supabase
       .from('friendships')
       .select('*, user_a:users!friendships_user_a_id_fkey(id, username, display_name), user_b:users!friendships_user_b_id_fkey(id, username, display_name)')
       .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
+    if (error) {
+      setFriendError(error.message)
+      setLoading(false)
+      return
+    }
     const accepted = [], pendingOut = [], pendingIn = []
     for (const f of data ?? []) {
       const friend = f.user_a_id === uid ? f.user_b : f.user_a
@@ -48,14 +55,17 @@ export default function FriendsPage() {
   }
 
   async function search(q) {
+    const requestId = ++searchRequestRef.current
     setSearchQuery(q)
     if (q.length < 2) { setSearchResults([]); return }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .select('id, username, display_name')
       .ilike('username', `%${q}%`)
       .neq('id', session.user.id)
       .limit(8)
+    if (requestId !== searchRequestRef.current) return
+    if (error) { setFriendError(error.message); setSearchResults([]); return }
     setSearchResults(data ?? [])
   }
 
@@ -78,12 +88,16 @@ export default function FriendsPage() {
   }
 
   async function acceptRequest(friendshipId) {
-    await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId)
+    setFriendError('')
+    const { error } = await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId)
+    if (error) { setFriendError(error.message); return }
     fetchFriendships()
   }
 
   async function declineRequest(friendshipId) {
-    await supabase.from('friendships').delete().eq('id', friendshipId)
+    setFriendError('')
+    const { error } = await supabase.from('friendships').delete().eq('id', friendshipId)
+    if (error) { setFriendError(error.message); return }
     fetchFriendships()
   }
 

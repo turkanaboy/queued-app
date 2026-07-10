@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { EmptyState, ScreenHeader, SectionTitle } from '../lib/queuedDesign'
-import { InitialsAvatar } from '../components/Layout'
 import { createParty, getUserParties } from '../lib/parties'
 
 export default function PartiesPage() {
@@ -16,16 +15,18 @@ export default function PartiesPage() {
   const [newMode, setNewMode] = useState('curated')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const uid = session?.user?.id
 
   const fetchParties = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
       const data = await getUserParties(uid)
       setParties(data)
-    } catch {
-      // silently stay empty
+    } catch (error) {
+      setLoadError(error.message ?? 'Could not load groups')
     } finally {
       setLoading(false)
     }
@@ -52,6 +53,7 @@ export default function PartiesPage() {
     <div className="pb-5">
       <ScreenHeader title="Groups" subtitle="Curate shared lists with your people" />
       <div className="space-y-5 px-[18px]">
+        {loadError && <p role="alert" className="rounded-[14px] border border-rose-300/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300">{loadError} <button type="button" onClick={fetchParties} className="ml-1 underline">Retry</button></p>}
 
         {/* Create group */}
         {showCreate ? (
@@ -66,6 +68,7 @@ export default function PartiesPage() {
                   key={mode}
                   type="button"
                   onClick={() => setNewMode(mode)}
+                  aria-pressed={newMode === mode}
                   className={`btn-press flex-1 rounded-full px-3 py-2 text-xs font-bold ${newMode === mode ? 'bg-[#F4E9D1] text-[#052016]' : 'text-[rgba(214,240,224,0.65)]'}`}
                 >
                   {label}
@@ -98,7 +101,7 @@ export default function PartiesPage() {
               </button>
             </div>
             {createError && (
-              <p className="mt-2 text-xs text-rose-300">{createError}</p>
+              <p role="alert" className="mt-2 text-xs text-rose-300">{createError}</p>
             )}
           </form>
         ) : (
@@ -145,10 +148,7 @@ export default function PartiesPage() {
 }
 
 function PartyCard({ party, first, onClick }) {
-  const members = party.party_members ?? []
-  const memberCount = party.party_members?.[0]?.count ?? members.length
-  const preview = members.slice(0, 3)
-  const overflow = memberCount - preview.length
+  const memberCount = party.party_members?.[0]?.count ?? 0
 
   return (
     <button
@@ -163,18 +163,6 @@ function PartyCard({ party, first, onClick }) {
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {preview.map(m => (
-          <InitialsAvatar
-            key={m.user_id ?? m.id}
-            name={m.user?.display_name || m.user?.username || '?'}
-            size="sm"
-          />
-        ))}
-        {overflow > 0 && (
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.7)] text-[10px] font-bold text-[rgba(214,240,224,0.6)]">
-            +{overflow}
-          </span>
-        )}
         <svg className="ml-1 text-[rgba(214,240,224,0.3)]" width="16" height="16" viewBox="0 0 24 24" fill="none">
           <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>

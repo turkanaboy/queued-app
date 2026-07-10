@@ -92,13 +92,18 @@ export default function TriviaChallengePage() {
 
   // Results
   const [results, setResults] = useState(null)
-  const [, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
   // Timer
   const timerRef = useRef(null)
-  const [, setTimerRunning] = useState(false)
+  const transitionTimersRef = useRef([])
+  const transitionLockedRef = useRef(false)
   const [barKey, setBarKey] = useState(0)
+
+  useEffect(() => () => {
+    clearTimeout(timerRef.current)
+    transitionTimersRef.current.forEach(clearTimeout)
+  }, [])
 
   // Load challenge
   useEffect(() => {
@@ -133,18 +138,9 @@ export default function TriviaChallengePage() {
 
   // Start timer when screen becomes quiz and phase becomes active
   const startTimer = useCallback((seconds) => {
-    clearInterval(timerRef.current)
-    setTimerRunning(true)
+    clearTimeout(timerRef.current)
     setBarKey(k => k + 1)
-
-    const deadline = Date.now() + seconds * 1000
-    timerRef.current = setInterval(() => {
-      if (Date.now() >= deadline) {
-        clearInterval(timerRef.current)
-        setTimerRunning(false)
-        setTimedOut(true)
-      }
-    }, 100)
+    timerRef.current = setTimeout(() => setTimedOut(true), seconds * 1000)
   }, [])
 
   useEffect(() => {
@@ -152,7 +148,7 @@ export default function TriviaChallengePage() {
     const q = challenge.questions[questionIndex]
     const isFill = q?.type === 'fill_in_blank'
     startTimer(isFill ? FILL_IN_BLANK_TIMER_SECONDS : MCQ_TIMER_SECONDS)
-    return () => clearInterval(timerRef.current)
+    return () => clearTimeout(timerRef.current)
   }, [screen, phase, questionIndex, challenge, startTimer])
 
   // Handle timeout
@@ -163,18 +159,21 @@ export default function TriviaChallengePage() {
   }, [timedOut, phase])
 
   function triggerReveal(optionIndex) {
-    clearInterval(timerRef.current)
-    setTimerRunning(false)
+    if (transitionLockedRef.current) return
+    transitionLockedRef.current = true
+    clearTimeout(timerRef.current)
     setSelectedOption(optionIndex)
     setPhase('reveal')
 
     // After reveal duration, move to exit/next
-    setTimeout(() => {
+    const revealTimer = setTimeout(() => {
       setPhase('exit')
-      setTimeout(() => {
+      const exitTimer = setTimeout(() => {
         advanceQuestion(optionIndex)
       }, SLIDE_OUT_MS)
+      transitionTimersRef.current.push(exitTimer)
     }, REVEAL_DURATION_MS)
+    transitionTimersRef.current.push(revealTimer)
   }
 
   function handleOptionSelect(idx) {
@@ -198,10 +197,12 @@ export default function TriviaChallengePage() {
 
     const next = questionIndex + 1
     if (next < 11) {
+      transitionLockedRef.current = false
       // Check if next is Q11 (the bonus round, index 10)
       if (next === 10) {
         setBonusBanner(true)
-        setTimeout(() => setBonusBanner(false), 2000)
+        const bonusTimer = setTimeout(() => setBonusBanner(false), 2000)
+        transitionTimersRef.current.push(bonusTimer)
       }
       setQuestionIndex(next)
     } else {
@@ -212,7 +213,6 @@ export default function TriviaChallengePage() {
   }
 
   async function handleSubmit(finalAnswers) {
-    setSubmitting(true)
     setSubmitError('')
     try {
       const res = await submitAnswers(challengeId, finalAnswers)
@@ -223,7 +223,6 @@ export default function TriviaChallengePage() {
       // to the quiz would restart the Q11 timer and append a 12th answer,
       // permanently breaking the exactly-11 contract the server enforces.
       setSubmitError(err?.message || 'Failed to submit. Please try again.')
-      setSubmitting(false)
     }
   }
 
@@ -274,7 +273,7 @@ export default function TriviaChallengePage() {
     return (
       <div className="flex min-h-dvh flex-col">
         <ScreenHeader title="Challenge sent" eyebrow="Trivia" back={
-          <button onClick={() => navigate('/friends')} className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
+          <button onClick={() => navigate('/friends')} aria-label="Back to friends" className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         } />
@@ -348,7 +347,7 @@ export default function TriviaChallengePage() {
       {/* Header */}
       <div className="px-[18px] pb-2 pt-[52px]">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/friends')} className="btn-press text-[rgba(214,240,224,0.5)]">
+          <button onClick={() => navigate('/friends')} aria-label="Back to friends" className="btn-press text-[rgba(214,240,224,0.5)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           <div className="text-center">
@@ -444,6 +443,8 @@ export default function TriviaChallengePage() {
                 <>
                   <input
                     type="text"
+                    aria-label="Bonus answer"
+                    maxLength={200}
                     value={fillInput}
                     onChange={e => setFillInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && fillInput.trim() && handleFillSubmit()}
@@ -497,7 +498,7 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
     return (
       <div className="flex min-h-dvh flex-col">
         <ScreenHeader title="Challenge sent!" eyebrow="Trivia" back={
-          <button onClick={onBack} className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
+          <button onClick={onBack} aria-label="Back to friends" className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         } />
@@ -538,7 +539,7 @@ function ResultsScreen({ challenge, results, uid, onBack }) {
   return (
     <div className="min-h-dvh pb-8">
       <ScreenHeader title="Results" eyebrow="Trivia" back={
-        <button onClick={onBack} className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
+        <button onClick={onBack} aria-label="Back to friends" className="btn-press mr-1 text-[rgba(214,240,224,0.5)]">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
       } />

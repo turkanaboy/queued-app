@@ -219,7 +219,7 @@ export default function CollectionPage() {
           <>
             <div className="grid grid-cols-3 gap-3">
               {activeItems.map(item => (
-                <DiscoverCard key={mediaKey(item)} item={item} logEntry={logMap[mediaKey(item)]} onTap={() => openLogSheet(item)} onQueue={() => handleQueue(item)} />
+                <DiscoverCard key={mediaKey(item)} item={item} logEntry={logMap[mediaKey(item)]} onTap={() => openLogSheet(item)} onQueue={() => logMap[mediaKey(item)] ? openLogSheet(item) : handleQueue(item)} />
               ))}
             </div>
             {query.length < 2 && <button onClick={() => loadSection(medium, pages[medium] + 1)} disabled={loading[medium]}
@@ -282,8 +282,8 @@ function DiscoverCard({ item, logEntry, onTap, onQueue }) {
             {queued && <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-[#2DD48F]" />}
           </PosterTile>
         </button>
-        <button onClick={onQueue}
-          className={`btn-press absolute right-1.5 top-1.5 flex h-[26px] w-[26px] items-center justify-center rounded-full text-sm font-bold backdrop-blur ${queued ? 'bg-[#2DD48F] text-[#052016]' : logEntry ? 'bg-[#D8A84A] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
+        <button onClick={onQueue} aria-label={logEntry ? `Edit ${item.media_title} in your log` : `Add ${item.media_title} to your queue`}
+          className={`btn-press absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold backdrop-blur ${queued ? 'bg-[#2DD48F] text-[#052016]' : logEntry ? 'bg-[#D8A84A] text-[#052016]' : 'bg-[rgba(2,12,8,0.7)] text-[#F4E9D1]'}`}>
           {logEntry ? '✓' : '+'}
         </button>
       </div>

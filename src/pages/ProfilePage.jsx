@@ -8,7 +8,7 @@ import { InitialsAvatar } from '../components/Layout'
 import { PLATFORMS, platformInitials } from '../lib/platforms'
 import { TASTE_GENRE_GROUPS } from '../lib/taste'
 import { displayRating } from '../lib/ratings'
-import { upsertMediaLog } from '../lib/mediaLog'
+import { setRecommendationState } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
 import { ProviderRows, RecommendationSheet } from '../components/RecommendationComposer'
@@ -32,11 +32,6 @@ import {
 
 const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
 
-function personalLogStatus(entry, fallback) {
-  if (!entry) return fallback
-  return entry.status ?? (entry.rating ? 'finished' : 'queued')
-}
-
 export default function ProfilePage() {
   const { userId } = useParams()
   const { session, refreshProfile } = useAuth()
@@ -48,7 +43,6 @@ export default function ProfilePage() {
   const [stats, setStats] = useState(null)
   const [mediaLog, setMediaLog] = useState([])
   const [recommendationQueue, setRecommendationQueue] = useState([])
-  const [sentRecommendations, setSentRecommendations] = useState([])
   const [activity, setActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [showLogSheet, setShowLogSheet] = useState(false)
@@ -59,10 +53,12 @@ export default function ProfilePage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
   const [editingTaste, setEditingTaste] = useState(false)
   const [selectedGenres, setSelectedGenres] = useState([])
+  const [watchingStyle, setWatchingStyle] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [medium, setMedium] = useState('movie')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [originFilter, setOriginFilter] = useState('all')
   const [sortOrder, setSortOrder] = useState('recent')
   const [showStatusChips, setShowStatusChips] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -70,13 +66,15 @@ export default function ProfilePage() {
   const [botResult, setBotResult] = useState(null)
   const [recommendItem, setRecommendItem] = useState(null)
   const [triviaHistory, setTriviaHistory] = useState([])
+  const [actionError, setActionError] = useState('')
+  const [accountBusy, setAccountBusy] = useState(false)
+  const [confirmAccountDelete, setConfirmAccountDelete] = useState(false)
 
   useEffect(() => {
     fetchProfile()
     fetchStats()
     fetchMediaLog()
     fetchRecommendationQueue()
-    fetchSentRecommendations()
     fetchActivity()
     fetchTriviaHistory()
   }, [targetId])
@@ -85,39 +83,41 @@ export default function ProfilePage() {
     try {
       const data = await fetchMyChallenges(targetId)
       setTriviaHistory(data.filter(c => c.status === 'completed'))
-    } catch {
-      // Non-fatal — trivia section just stays empty
+    } catch (error) {
+      setActionError(error.message || 'Could not load trivia history.')
     }
   }
 
   async function fetchProfile() {
-    const { data } = await supabase.from('users').select('id, username, display_name, platforms, favorite_genres').eq('id', targetId).single()
+    const { data, error } = await supabase.from('users').select('id, username, display_name, platforms, favorite_genres, watching_style').eq('id', targetId).single()
+    if (error) {
+      setActionError(error.message)
+      setLoading(false)
+      return
+    }
     setProfile(data)
     setDisplayName(data?.display_name || '')
     setSelectedPlatforms(data?.platforms ?? [])
     setSelectedGenres(data?.favorite_genres ?? [])
+    setWatchingStyle(data?.watching_style ?? '')
     setLoading(false)
   }
 
   async function fetchStats() {
-    const logTable = isOwnProfile ? 'user_media_log' : 'friend_media_log'
     const finishedQuery = isOwnProfile
       ? supabase.from('recommendations').select('rating').eq('recipient_id', targetId).eq('recipient_status', 'finished').is('deleted_at', null)
       : supabase.from('friend_recommendation_activity').select('rating').eq('recipient_id', targetId)
-    const [sent, received, finished, logged, friends] = await Promise.all([
-      supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('sender_id', targetId).is('deleted_at', null),
-      supabase.from('recommendations').select('*', { count: 'exact', head: true }).eq('recipient_id', targetId).is('deleted_at', null),
+    const [finished, friends] = await Promise.all([
       finishedQuery,
-      supabase.from(logTable).select('*', { count: 'exact', head: true }).eq('user_id', targetId),
       supabase.from('friendships').select('*', { count: 'exact', head: true }).or(`user_a_id.eq.${targetId},user_b_id.eq.${targetId}`).eq('status', 'accepted'),
     ])
+    if (finished.error || friends.error) {
+      setActionError(finished.error?.message || friends.error?.message || 'Could not load profile stats.')
+      return
+    }
     const ratings = (finished.data ?? []).map(r => r.rating).filter(Boolean)
     setStats({
-      sent: sent.count ?? 0,
-      received: received.count ?? 0,
-      finished: finished.data?.length ?? 0,
       avgRating: ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null,
-      logged: logged.count ?? 0,
       friends: friends.count ?? 0,
     })
   }
@@ -131,31 +131,23 @@ export default function ProfilePage() {
         .from('friend_media_log')
         .select('*')
 
-    const { data } = await query
+    const { data, error } = await query
       .eq('user_id', targetId)
       .order('created_at', { ascending: false })
       .limit(300)
+    if (error) { setActionError(error.message); return }
     setMediaLog(data ?? [])
   }
 
   async function fetchRecommendationQueue() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('recommendations')
       .select('*, sender:users!recommendations_sender_id_fkey(id,username,display_name)')
       .eq('recipient_id', targetId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
+    if (error) { setActionError(error.message); return }
     setRecommendationQueue(data ?? [])
-  }
-
-  async function fetchSentRecommendations() {
-    const { data } = await supabase
-      .from('recommendations')
-      .select('*, recipient:users!recommendations_recipient_id_fkey(id,username,display_name)')
-      .eq('sender_id', targetId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-    setSentRecommendations(data ?? [])
   }
 
   async function fetchActivity() {
@@ -169,35 +161,31 @@ export default function ProfilePage() {
         .from('friend_recommendation_activity')
         .select('id, media_title, media_poster_url, media_type, rating, created_at')
 
-    const { data } = await query
+    const { data, error } = await query
       .eq('recipient_id', targetId)
       .order('created_at', { ascending: false })
       .limit(20)
+    if (error) { setActionError(error.message); return }
     setActivity(data ?? [])
   }
 
   async function updateLogStatus(item, status) {
-    await supabase.from('user_media_log').update({ status }).eq('id', item.id)
+    setActionError('')
+    const { error } = await supabase.from('user_media_log').update({ status }).eq('id', item.id)
+    if (error) { setActionError(error.message); return }
     fetchMediaLog()
     fetchStats()
   }
 
   async function updateRecommendationStatus(item, status) {
-    await supabase.from('recommendations').update({ recipient_status: status }).eq('id', item.recommendation_id)
-    if (status !== 'not_yet_viewed') {
-      await upsertMediaLog({
-        user_id: session.user.id,
-        media_type: item.media_type,
-        media_id: item.media_id,
-        media_title: item.media_title,
-        media_creator: item.media_creator ?? null,
-        media_poster_url: item.media_poster_url,
-        rating: item.rating ?? null,
-        status,
-        source_type: 'recommendation',
-        source_user_id: item.origin_user_id,
-        streaming_providers: item.streaming_providers ?? [],
-      })
+    setActionError('')
+    const { error } = await setRecommendationState(item.recommendation_id, {
+      status,
+      rating: status === 'finished' ? item.rating ?? null : null,
+    })
+    if (error) {
+      setActionError(error.message)
+      return
     }
     fetchRecommendationQueue()
     fetchMediaLog()
@@ -205,7 +193,9 @@ export default function ProfilePage() {
   }
 
   async function deleteLogEntry(id) {
-    await supabase.from('user_media_log').delete().eq('id', id)
+    setActionError('')
+    const { error } = await supabase.from('user_media_log').delete().eq('id', id)
+    if (error) { setActionError(error.message); return }
     fetchMediaLog()
     fetchStats()
   }
@@ -226,10 +216,10 @@ export default function ProfilePage() {
     try {
       const json = await invokeEdgeFunction('bot-recommendations', {
         method: 'POST',
-        body: { user_id: session.user.id, force_new: true },
+        body: { user_id: session.user.id },
       })
       setBotResult(json)
-      await Promise.all([fetchRecommendationQueue(), fetchSentRecommendations(), fetchMediaLog(), fetchStats()])
+      await Promise.all([fetchRecommendationQueue(), fetchMediaLog(), fetchStats()])
     } catch (err) {
       setBotResult({ error: err.message || 'Queued Bot could not make a pick.' })
     } finally {
@@ -239,7 +229,9 @@ export default function ProfilePage() {
 
   async function saveProfile() {
     setSaving(true)
-    await supabase.from('users').update({ display_name: displayName }).eq('id', session.user.id)
+    setActionError('')
+    const { error } = await supabase.from('users').update({ display_name: displayName }).eq('id', session.user.id)
+    if (error) { setActionError(error.message); setSaving(false); return }
     await refreshProfile()
     setEditing(false)
     fetchProfile()
@@ -248,7 +240,9 @@ export default function ProfilePage() {
 
   async function savePlatforms() {
     setSaving(true)
-    await supabase.from('users').update({ platforms: selectedPlatforms }).eq('id', session.user.id)
+    setActionError('')
+    const { error } = await supabase.from('users').update({ platforms: selectedPlatforms }).eq('id', session.user.id)
+    if (error) { setActionError(error.message); setSaving(false); return }
     await refreshProfile()
     setEditingPlatforms(false)
     fetchProfile()
@@ -257,7 +251,9 @@ export default function ProfilePage() {
 
   async function saveTaste() {
     setSaving(true)
-    await supabase.from('users').update({ favorite_genres: selectedGenres }).eq('id', session.user.id)
+    setActionError('')
+    const { error } = await supabase.from('users').update({ favorite_genres: selectedGenres, watching_style: watchingStyle.trim() || null }).eq('id', session.user.id)
+    if (error) { setActionError(error.message); setSaving(false); return }
     await refreshProfile()
     setEditingTaste(false)
     fetchProfile()
@@ -267,6 +263,37 @@ export default function ProfilePage() {
   async function doSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
+  }
+
+  async function exportAccountData() {
+    setAccountBusy(true)
+    setActionError('')
+    try {
+      const data = await invokeEdgeFunction('account-data', { method: 'POST', body: { action: 'export' } })
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `queued-data-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setActionError(error.message || 'Could not export account data.')
+    } finally {
+      setAccountBusy(false)
+    }
+  }
+
+  async function deleteAccount() {
+    setAccountBusy(true)
+    setActionError('')
+    try {
+      await invokeEdgeFunction('account-data', { method: 'POST', body: { action: 'delete', confirmation: 'DELETE' } })
+      await supabase.auth.signOut({ scope: 'local' })
+      navigate('/login', { replace: true })
+    } catch (error) {
+      setActionError(error.message || 'Could not delete account.')
+      setAccountBusy(false)
+    }
   }
 
   function togglePlatform(id) {
@@ -280,6 +307,7 @@ export default function ProfilePage() {
   const allItems = useMemo(() => {
     const mediaKey = item => `${item.media_type}:${item.media_id}`
     const logByMediaId = new Map(mediaLog.map(item => [mediaKey(item), item]))
+    const recommendationMediaIds = new Set(recommendationQueue.map(mediaKey))
     return [
       ...recommendationQueue.map(rec => {
         const logEntry = logByMediaId.get(mediaKey(rec))
@@ -294,7 +322,7 @@ export default function ProfilePage() {
           media_poster_url: rec.media_poster_url,
           rating: rec.rating ?? logEntry?.rating ?? null,
           review: logEntry?.review ?? null,
-          status: personalLogStatus(logEntry, rec.recipient_status),
+          status: rec.recipient_status,
           created_at: logEntry?.created_at ?? rec.created_at,
           origin: rec.sender_id === BOT_USER_ID ? 'Queued Bot' : (rec.sender?.display_name || rec.sender?.username || 'friend'),
           origin_type: rec.sender_id === BOT_USER_ID ? 'bot' : 'recommendation',
@@ -304,28 +332,8 @@ export default function ProfilePage() {
           streaming_providers: rec.streaming_providers ?? [],
         }
       }),
-      ...sentRecommendations
-        .filter(rec => !logByMediaId.has(mediaKey(rec)))
-        .map(rec => ({
-          id: `sent-${rec.id}`,
-          recommendation_id: rec.id,
-          item_kind: 'sent',
-          media_type: rec.media_type,
-          media_id: rec.media_id,
-          media_title: rec.media_title,
-          media_creator: rec.media_creator,
-          media_poster_url: rec.media_poster_url,
-          rating: rec.rating ?? null,
-          status: rec.recipient_status,
-          created_at: rec.created_at,
-          origin: `Sent to ${rec.recipient?.display_name || rec.recipient?.username || 'friend'}`,
-          origin_type: 'sent',
-          origin_user_id: rec.recipient_id,
-        })),
       ...mediaLog
-        .filter(item =>
-          !recommendationQueue.some(rec => mediaKey(rec) === mediaKey(item))
-        )
+        .filter(item => !recommendationMediaIds.has(mediaKey(item)))
         .map(item => ({
           ...item,
           item_kind: 'log',
@@ -339,16 +347,18 @@ export default function ProfilePage() {
           origin_user_id: item.source_user_id,
         })),
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  }, [mediaLog, recommendationQueue, sentRecommendations])
+  }, [mediaLog, recommendationQueue])
 
   if (loading) return <div className="flex items-center justify-center pt-20 text-white/40">Loading...</div>
   if (!profile) return <div className="flex items-center justify-center pt-20 text-white/40">User not found.</div>
 
-  // Deduplicated personal-log count: exclude sent recs (they aren't the user's own logged titles)
-  const loggedCount = allItems.filter(item => item.item_kind !== 'sent').length
-  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, allItems.filter(item => item.media_type === type && item.item_kind !== 'sent').length]))
-  const mediumItems = allItems.filter(item => item.media_type === medium && item.item_kind !== 'sent')
-  const filteredItems = mediumItems.filter(item => statusFilter === 'all' || item.status === statusFilter)
+  const loggedCount = allItems.length
+  const counts = Object.fromEntries(MEDIA_ORDER.map(type => [type, allItems.filter(item => item.media_type === type).length]))
+  const mediumItems = allItems.filter(item => item.media_type === medium)
+  const filteredItems = mediumItems.filter(item =>
+    (statusFilter === 'all' || item.status === statusFilter)
+    && (originFilter === 'all' || item.origin_type === originFilter)
+  )
   const visibleItems = sortOrder === 'ratingDesc'
     ? [...filteredItems].sort((a, b) => {
       const ratingDiff = Number(b.rating ?? -1) - Number(a.rating ?? -1)
@@ -377,7 +387,7 @@ export default function ProfilePage() {
           <div className="flex gap-2">
             <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="input-glass py-2 text-sm font-bold" />
             <button onClick={saveProfile} disabled={saving} className="btn-press btn-cream rounded-xl px-3 text-xs font-bold">{saving ? '...' : 'Save'}</button>
-            <button onClick={() => setEditing(false)} className="btn-press px-2 text-white/50">×</button>
+            <button aria-label="Cancel profile edit" onClick={() => setEditing(false)} className="btn-press min-h-10 min-w-10 px-2 text-white/50">×</button>
           </div>
         ) : (
           <div className="flex items-center justify-between">
@@ -399,12 +409,20 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {actionError && (
+        <p role="alert" className="mx-[18px] mb-3 rounded-[14px] border border-rose-300/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300">
+          {actionError}
+        </p>
+      )}
+
       {isOwnProfile && (
         <div className="px-[18px] pb-4">
           <TasteSection
             editing={editingTaste}
             setEditing={setEditingTaste}
             selectedGenres={selectedGenres}
+            watchingStyle={watchingStyle}
+            setWatchingStyle={setWatchingStyle}
             toggleGenre={toggleGenre}
             save={saveTaste}
             saving={saving}
@@ -471,7 +489,7 @@ export default function ProfilePage() {
                   className={`btn-press inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-bold ${showStatusChips || statusFilter !== 'all' ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(10,52,36,0.7)] text-[#F7F1E4]'}`}>
                   <FilterIcon /> Status
                 </button>
-                <button onClick={() => setShowLogSheet(true)} className="btn-press flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#C96B4B,#B87333)] text-lg font-bold text-[#FFF8E8] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">+</button>
+                <button aria-label="Add title" onClick={() => setShowLogSheet(true)} className="btn-press flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,#C96B4B,#B87333)] text-lg font-bold text-[#FFF8E8] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">+</button>
                 </>
               )}
             </div>
@@ -481,6 +499,11 @@ export default function ProfilePage() {
               <Chip active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</Chip>
               {STATUS_ORDER.map(status => <Chip key={status} active={statusFilter === status} onClick={() => setStatusFilter(status)}>{STATUS[status].label}</Chip>)}
             </div>
+          </div>
+          <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
+            {[['all', 'All sources'], ['self', 'Mine'], ['recommendation', 'Friends'], ['bot', 'Bot'], ['party', 'Groups']].map(([value, label]) => (
+              <Chip key={value} active={originFilter === value} onClick={() => setOriginFilter(value)}>{label}</Chip>
+            ))}
           </div>
         </div>
 
@@ -515,6 +538,16 @@ export default function ProfilePage() {
           save={savePlatforms}
           saving={saving}
         />
+
+        {isOwnProfile && (
+          <AccountSection
+            busy={accountBusy}
+            confirmingDelete={confirmAccountDelete}
+            setConfirmingDelete={setConfirmAccountDelete}
+            onExport={exportAccountData}
+            onDelete={deleteAccount}
+          />
+        )}
 
         {triviaHistory.length > 0 && (
           <TriviaHistorySection challenges={triviaHistory} userId={targetId} />
@@ -603,7 +636,7 @@ function BotStrip({ loading, active, result, onAsk, onDismiss, onStatusChange })
     const rec = result.recommendation
     return (
       <div className="relative rounded-[18px] border border-[#2DD48F]/25 bg-[rgba(12,62,44,0.72)] p-3 shadow-[inset_2px_0_0_rgba(45,212,143,0.5)]">
-        <button onClick={onDismiss} className="absolute right-2 top-2 text-[rgba(214,240,224,0.5)]">×</button>
+        <button type="button" aria-label="Dismiss bot recommendation" onClick={onDismiss} className="absolute right-1 top-1 flex min-h-10 min-w-10 items-center justify-center text-[rgba(214,240,224,0.5)]">×</button>
         <div className="flex gap-3 pr-5">
           <PosterTile item={rec} w={42} h={62} radius={9} />
           <div className="min-w-0 flex-1">
@@ -674,7 +707,7 @@ function hasStreamingInfo(providers) {
   return Boolean(providers.flatrate?.length || providers.rent?.length || providers.buy?.length || providers.link)
 }
 
-function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, saving }) {
+function TasteSection({ editing, setEditing, selectedGenres, watchingStyle, setWatchingStyle, toggleGenre, save, saving }) {
   if (!editing) {
     return (
       <button
@@ -684,7 +717,7 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, 
         <span>
           <span className="block text-sm font-extrabold text-[#F7F1E4]">Customize your experience</span>
           <span className="mt-0.5 block text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">
-            {selectedGenres.length ? `${selectedGenres.length} taste picks saved` : 'Tune genres for recommendations'}
+            {selectedGenres.length || watchingStyle ? `${selectedGenres.length} taste picks saved` : 'Tune genres for recommendations'}
           </span>
         </span>
         <span className="text-[#D8A84A]">Edit</span>
@@ -699,7 +732,7 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, 
           <p className="text-sm font-extrabold text-[#F7F1E4]">Customize your experience</p>
           <p className="mt-0.5 text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">These answers guide Queued Bot.</p>
         </div>
-        <button onClick={() => setEditing(false)} className="btn-press text-xl leading-none text-[rgba(214,240,224,0.5)]">x</button>
+        <button type="button" aria-label="Close customization" onClick={() => setEditing(false)} className="btn-press min-h-10 min-w-10 text-xl leading-none text-[rgba(214,240,224,0.5)]">×</button>
       </div>
 
       <div className="space-y-3">
@@ -714,6 +747,7 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, 
                     key={`${group.key}-${genre}`}
                     type="button"
                     onClick={() => toggleGenre(genre)}
+                    aria-pressed={active}
                     className={`btn-press rounded-full border px-3 py-1.5 text-xs font-bold ${active ? 'border-[#D8A84A] bg-[#F4E9D1] text-[#052016]' : 'border-[rgba(150,214,180,0.16)] bg-[rgba(9,46,32,0.66)] text-[rgba(214,240,224,0.7)]'}`}
                   >
                     {genre}
@@ -723,6 +757,11 @@ function TasteSection({ editing, setEditing, selectedGenres, toggleGenre, save, 
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="mt-4">
+        <label htmlFor="watching-style" className="font-mono-q mb-1.5 block text-[10px] font-bold uppercase tracking-[1.4px] text-[rgba(214,240,224,0.42)]">Watching style</label>
+        <textarea id="watching-style" value={watchingStyle} maxLength={280} onChange={event => setWatchingStyle(event.target.value)} rows={2} placeholder="Examples: short weekday episodes, slow-burn movies, co-op games" className="input-glass resize-none text-sm" />
       </div>
 
       <div className="mt-4 flex gap-2">
@@ -756,6 +795,28 @@ function PlatformsSection({ isOwnProfile, profile, editing, setEditing, selected
           return p ? <span key={id} className="rounded-full px-3 py-1.5 text-xs font-bold text-white" style={{ background: p.color }}>{platformInitials(p.name)}</span> : null
         })}</div>
       ) : <p className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-center text-sm text-[rgba(214,240,224,0.5)]">No platforms listed</p>}
+    </section>
+  )
+}
+
+function AccountSection({ busy, confirmingDelete, setConfirmingDelete, onExport, onDelete }) {
+  return (
+    <section>
+      <SectionTitle>Account</SectionTitle>
+      <div className="space-y-3 rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-4">
+        <button type="button" disabled={busy} onClick={onExport} className="btn-press btn-outline-cream w-full rounded-xl px-4 py-2.5 text-sm font-bold disabled:opacity-50">Export my data</button>
+        {confirmingDelete ? (
+          <div className="rounded-[14px] border border-rose-300/20 bg-rose-500/10 p-3">
+            <p className="text-sm text-rose-100">Delete your account and all Queued data permanently?</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" disabled={busy} onClick={onDelete} className="btn-press rounded-xl bg-rose-500/80 px-4 py-2 text-xs font-bold disabled:opacity-50">{busy ? 'Deleting...' : 'Delete permanently'}</button>
+              <button type="button" disabled={busy} onClick={() => setConfirmingDelete(false)} className="btn-press px-3 py-2 text-xs font-bold text-white/60">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => setConfirmingDelete(true)} className="btn-press text-sm font-bold text-rose-300 disabled:opacity-50">Delete account</button>
+        )}
+      </div>
     </section>
   )
 }

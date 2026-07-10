@@ -7,7 +7,7 @@ import { buildAuthRedirectUrl, isNativeApp } from '../lib/nativeAuth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { session, profile, loading: authLoading } = useAuth()
+  const { session, profile, loading: authLoading, error: authError } = useAuth()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -34,7 +34,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-6 py-12">
+    <main className="min-h-dvh flex flex-col items-center justify-center px-6 py-12">
       {/* Logo */}
       <div className="anim-scale mb-10 text-center">
         <div className="w-20 h-20 rounded-[28px] mx-auto mb-4 flex items-center justify-center shadow-2xl"
@@ -61,8 +61,9 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Email</label>
+              <label htmlFor="login-email" className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Email</label>
               <input
+                id="login-email"
                 type="email"
                 required
                 value={email}
@@ -71,7 +72,7 @@ export default function LoginPage() {
                 className="input-glass"
               />
             </div>
-            {error && <p className="text-rose-300 text-sm font-medium">{error}</p>}
+            {(error || authError) && <p role="alert" className="text-rose-300 text-sm font-medium">{error || authError}</p>}
             <button
               type="submit"
               disabled={loading}
@@ -85,6 +86,6 @@ export default function LoginPage() {
       </div>
 
       <p className="text-white/30 text-xs mt-8">No password needed. Ever.</p>
-    </div>
+    </main>
   )
 }

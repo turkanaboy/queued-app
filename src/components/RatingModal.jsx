@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { PosterTile, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, ratingToStep, stepToRating } from '../lib/ratings'
-import { upsertMediaLog } from '../lib/mediaLog'
+import { setRecommendationState, upsertMediaLog } from '../lib/mediaLog'
 
 const TYPE_LABEL = { movie: 'Movie', tv: 'TV', book: 'Book', album: 'Album' }
 
@@ -44,20 +44,29 @@ export default function RatingModal({ item, existingEntry, onClose, onSaved, onR
   async function save() {
     setSaving(true)
     setError('')
-    const { error } = await upsertMediaLog({
-      user_id: session.user.id,
-      media_type: item.media_type,
-      media_id: item.media_id,
-      media_title: details.media_title ?? item.media_title,
-      media_creator: details.media_creator ?? item.media_creator ?? null,
-      media_poster_url: details.media_poster_url ?? item.media_poster_url,
-      rating: stepToRating(ratingStep),
-      status,
-      review: comment.trim() || null,
-      source_type: existingEntry?.source_type ?? 'self',
-      source_user_id: existingEntry?.source_user_id ?? null,
-      streaming_providers: existingEntry?.streaming_providers ?? item.streaming_providers ?? [],
-    })
+    const rating = stepToRating(ratingStep)
+    const providers = existingEntry?.streaming_providers ?? item.streaming_providers ?? []
+    const { error } = item.recommendation_id
+      ? await setRecommendationState(item.recommendation_id, {
+          rating: status === 'finished' ? rating : null,
+          status,
+          review: comment,
+          streamingProviders: providers,
+        })
+      : await upsertMediaLog({
+          user_id: session.user.id,
+          media_type: item.media_type,
+          media_id: item.media_id,
+          media_title: details.media_title ?? item.media_title,
+          media_creator: details.media_creator ?? item.media_creator ?? null,
+          media_poster_url: details.media_poster_url ?? item.media_poster_url,
+          rating,
+          status,
+          review: comment.trim() || null,
+          source_type: existingEntry?.source_type ?? 'self',
+          source_user_id: existingEntry?.source_user_id ?? null,
+          streaming_providers: providers,
+        })
     if (error) {
       setError(error.message)
       setSaving(false)

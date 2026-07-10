@@ -56,12 +56,37 @@ export async function getParty(partyId) {
     .select(`
       *,
       party_members(*, user:users(id, username, display_name)),
-      party_list_items(*, party_votes(*))
+      party_list_items(*, party_votes!party_votes_party_item_id_fkey(*))
     `)
     .eq('id', partyId)
     .single()
   if (error) throw error
   return data
+}
+
+export async function renameParty(partyId, name) {
+  const { error } = await supabase.rpc('rename_party', { p_party_id: partyId, p_name: name })
+  if (error) throw error
+}
+
+export async function leaveParty(partyId) {
+  const { error } = await supabase.rpc('leave_party', { p_party_id: partyId })
+  if (error) throw error
+}
+
+export async function deleteParty(partyId) {
+  const { error } = await supabase.from('parties').delete().eq('id', partyId)
+  if (error) throw error
+}
+
+export async function removePartyItem(itemId) {
+  const { error } = await supabase.rpc('remove_party_item', { p_item_id: itemId })
+  if (error) throw error
+}
+
+export async function removePartyMember(partyId, userId) {
+  const { error } = await supabase.rpc('remove_party_member', { p_party_id: partyId, p_user_id: userId })
+  if (error) throw error
 }
 
 // ── List items ────────────────────────────────────────────────

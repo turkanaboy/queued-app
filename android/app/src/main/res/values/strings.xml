@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Queued</string>
+    <string name="title_activity_main">Queued</string>
+    <string name="package_name">com.queued.app</string>
+    <string name="custom_url_scheme">com.queued.app</string>
+</resources>

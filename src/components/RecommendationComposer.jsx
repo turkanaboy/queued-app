@@ -3,16 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { InitialsAvatar } from './Layout'
 import { getProviderLink, getBookLinks, getAlbumLinks, getGameLinks } from '../lib/affiliates'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
 
 async function mediaCall(path) {
-  const token = (await supabase.auth.getSession()).data.session?.access_token
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-media${path}`, {
-    headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
-  })
-  return res.json()
+  return invokeEdgeFunction('search-media', { path })
 }
 
 export function RecommendationSheet({ onClose, initialItem }) {
@@ -37,28 +34,36 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
   const [alreadySent, setAlreadySent] = useState({})
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
   const debounceRef = useRef(null)
   const latestQueryRef = useRef('')
+  const providerRequestRef = useRef(0)
+  const duplicateRequestRef = useRef(0)
 
   async function fetchFriends() {
     const uid = session.user.id
-    const { data } = await supabase
+    const { data, error: friendsError } = await supabase
       .from('friendships')
       .select('*, user_a:users!friendships_user_a_id_fkey(id, username, display_name), user_b:users!friendships_user_b_id_fkey(id, username, display_name)')
       .or(`user_a_id.eq.${uid},user_b_id.eq.${uid}`)
       .eq('status', 'accepted')
+    if (friendsError) { setError(friendsError.message); return }
     setFriends((data ?? []).map(f => ({ ...f, friend: f.user_a_id === uid ? f.user_b : f.user_a })).filter(f => f.friend?.username || f.friend?.display_name))
   }
 
-  async function checkDuplicates(mediaId, friendIds) {
+  async function checkDuplicates(mediaType, mediaId, friendIds) {
+    const requestId = ++duplicateRequestRef.current
     const uid = session.user.id
-    const { data } = await supabase
+    const { data, error: duplicateError } = await supabase
       .from('recommendations')
       .select('recipient_id')
       .eq('sender_id', uid)
+      .eq('media_type', mediaType)
       .eq('media_id', mediaId)
       .in('recipient_id', friendIds)
       .is('deleted_at', null)
+    if (requestId !== duplicateRequestRef.current) return
+    if (duplicateError) { setError(duplicateError.message); return }
     const sent = {}
     for (const r of data ?? []) sent[r.recipient_id] = true
     setAlreadySent(sent)
@@ -92,14 +97,21 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
   }
 
   async function selectTitle(item) {
+    const requestId = ++providerRequestRef.current
     setSelected(item)
+    setAlreadySent({})
     setResults([])
+    setProviders(null)
+    setError('')
     if (!['movie', 'tv'].includes(item.media_type)) {
-      setProviders(null)
       return
     }
-    const json = await mediaCall(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)
-    setProviders(json.providers ?? null)
+    try {
+      const json = await mediaCall(`?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`)
+      if (providerRequestRef.current === requestId) setProviders(json.providers ?? null)
+    } catch (err) {
+      if (providerRequestRef.current === requestId) setError(err.message || 'Could not load streaming options.')
+    }
   }
 
   useEffect(() => {
@@ -117,6 +129,7 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
   async function handleSubmit() {
     if (!selected || selectedFriends.length === 0) return
     setSubmitting(true)
+    setError('')
     const uid = session.user.id
     const rows = selectedFriends.filter(f => !alreadySent[f.friend.id]).map(f => ({
       sender_id: uid,
@@ -129,14 +142,28 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
       media_creator: selected.media_creator ?? null,
       streaming_providers: providers ?? [],
     }))
-    await supabase.from('recommendations').insert(rows)
-    if (onDone) onDone()
-    else navigate('/friends')
+    try {
+      const { error: insertError } = await supabase.from('recommendations').insert(rows)
+      if (insertError) throw insertError
+      if (onDone) onDone()
+      else navigate('/friends')
+    } catch (err) {
+      setError(err.message || 'Could not send this recommendation.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  useEffect(() => { fetchFriends() }, [session])
   useEffect(() => {
-    if (selected && selectedFriends.length > 0) checkDuplicates(selected.media_id, selectedFriends.map(f => f.friend.id))
+    fetchFriends()
+    return () => {
+      clearTimeout(debounceRef.current)
+      providerRequestRef.current += 1
+      duplicateRequestRef.current += 1
+    }
+  }, [session])
+  useEffect(() => {
+    if (selected && selectedFriends.length > 0) checkDuplicates(selected.media_type, selected.media_id, selectedFriends.map(f => f.friend.id))
   }, [selected, selectedFriends])
 
   const sendableCount = selectedFriends.filter(f => !alreadySent[f.friend.id]).length
@@ -158,7 +185,7 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
         {results.length > 0 && !selected && (
           <div className="max-h-[220px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
             {results.map((r, i) => (
-              <button key={r.media_id} onClick={() => selectTitle(r)} className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
+              <button key={`${r.media_type}:${r.media_id}`} onClick={() => selectTitle(r)} className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
                 <PosterTile item={r} w={34} h={52} radius={8} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-[#F7F1E4]">{r.media_title}</p>
@@ -177,7 +204,7 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
                 <p className="truncate text-sm font-extrabold text-[#F7F1E4]">{selected.media_title}</p>
                 <p className="truncate text-xs text-[rgba(214,240,224,0.5)]">{selected.media_creator || selected.media_type}</p>
               </div>
-              <button onClick={() => { setSelected(null); setQuery(''); setProviders(null) }} className="btn-press text-xl text-[rgba(214,240,224,0.5)]">x</button>
+              <button type="button" aria-label="Clear selected title" onClick={() => { setSelected(null); setQuery(''); setProviders(null) }} className="btn-press min-h-10 min-w-10 text-xl text-[rgba(214,240,224,0.5)]">×</button>
             </div>
             <div className="mt-2"><ProviderRows providers={providers} title={selected.media_title} creator={selected.media_creator} mediaType={selected.media_type} compact /></div>
           </div>
@@ -203,6 +230,8 @@ export function RecommendationComposer({ compact = false, onDone, initialItem = 
 
       <textarea value={note} onChange={e => setNote(e.target.value.slice(0, 500))} rows={3} placeholder="Note (optional)"
         className="w-full resize-none rounded-[14px] border border-[rgba(150,214,180,0.16)] bg-[rgba(2,17,12,0.7)] px-3.5 py-3 text-sm text-[#F7F1E4] outline-none placeholder:text-[#F7F1E4]/35 focus:border-[#D8A84A]/80" />
+
+      {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
 
       <button onClick={handleSubmit} disabled={submitting || !selected || sendableCount === 0}
         className="btn-press btn-cream w-full rounded-2xl py-4 text-sm font-bold disabled:opacity-40">
