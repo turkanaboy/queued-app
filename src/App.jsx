@@ -29,8 +29,9 @@ function RequireAuth({ children }) {
 }
 
 function RequireUsername({ children }) {
-  const { profile, loading } = useAuth()
+  const { profile, loading, error, refreshProfile } = useAuth()
   if (loading) return <LoadingScreen />
+  if (error) return <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center text-rose-200"><p>Could not load your profile: {error}</p><button onClick={refreshProfile} className="btn-press btn-cream rounded-xl px-4 py-2 text-sm font-bold">Retry</button></div>
   if (!profile?.username) return <Navigate to="/setup" replace />
   return children
 }

@@ -8,6 +8,7 @@ import {
   addToPartyList,
   buildPartyInviteLink,
   castVote,
+  deleteParty,
   finishPickedItem,
   getCurrentPicker,
   getMyLogItems,
@@ -15,7 +16,11 @@ import {
   getParty,
   getPartyInviteCandidates,
   inviteFriendToParty,
+  leaveParty,
   pickItem,
+  removePartyItem,
+  removePartyMember,
+  renameParty,
 } from '../lib/parties'
 
 const GROUP_STATUS_LABELS = { unwatched: 'Active', picked: 'Chosen', watched: 'Done' }
@@ -46,6 +51,12 @@ export default function PartyDetailPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [voteFilter, setVoteFilter] = useState('all')
+  const [loadError, setLoadError] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
+  const [groupName, setGroupName] = useState('')
+  const [settingsError, setSettingsError] = useState('')
+  const [settingsBusy, setSettingsBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const uid = session?.user?.id
 
@@ -53,11 +64,13 @@ export default function PartyDetailPage() {
 
   async function fetchParty() {
     setLoading(true)
+    setLoadError('')
     try {
       const data = await getParty(partyId)
       setParty(data)
-    } catch {
-      navigate('/parties', { replace: true })
+      setGroupName(data.name)
+    } catch (error) {
+      setLoadError(error.message ?? 'Could not load this group')
     } finally {
       setLoading(false)
     }
@@ -77,8 +90,68 @@ export default function PartyDetailPage() {
       ])
       setLogItems(q)
       setOverlapItems(o)
-    } catch {
-      // silently empty
+    } catch (error) {
+      setAddError(error.message ?? 'Could not load titles')
+    }
+  }
+
+  async function handleRename() {
+    setSettingsBusy(true)
+    setSettingsError('')
+    try {
+      await renameParty(partyId, groupName)
+      await fetchParty()
+    } catch (error) {
+      setSettingsError(error.message ?? 'Could not rename group')
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  async function handleLeave() {
+    setSettingsBusy(true)
+    setSettingsError('')
+    try {
+      await leaveParty(partyId)
+      navigate('/parties', { replace: true })
+    } catch (error) {
+      setSettingsError(error.message ?? 'Could not leave group')
+      setSettingsBusy(false)
+    }
+  }
+
+  async function handleDelete() {
+    setSettingsBusy(true)
+    setSettingsError('')
+    try {
+      await deleteParty(partyId)
+      navigate('/parties', { replace: true })
+    } catch (error) {
+      setSettingsError(error.message ?? 'Could not delete group')
+      setSettingsBusy(false)
+    }
+  }
+
+  async function handleRemoveMember(userId) {
+    setSettingsBusy(true)
+    setSettingsError('')
+    try {
+      await removePartyMember(partyId, userId)
+      await fetchParty()
+    } catch (error) {
+      setSettingsError(error.message ?? 'Could not remove member')
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  async function handleRemoveItem(itemId) {
+    setPickError('')
+    try {
+      await removePartyItem(itemId)
+      await fetchParty()
+    } catch (error) {
+      setPickError(error.message ?? 'Could not remove item')
     }
   }
 
@@ -211,6 +284,18 @@ export default function PartyDetailPage() {
     )
   }
 
+  if (loadError) {
+    return (
+      <div role="alert" className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center text-rose-200">
+        <p>{loadError}</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={fetchParty} className="btn-press btn-cream rounded-xl px-4 py-2 text-sm font-bold">Retry</button>
+          <button type="button" onClick={() => navigate('/parties')} className="btn-press rounded-xl border border-white/20 px-4 py-2 text-sm font-bold">Back to groups</button>
+        </div>
+      </div>
+    )
+  }
+
   if (!party) return null
 
   const members = party.party_members ?? []
@@ -222,6 +307,7 @@ export default function PartyDetailPage() {
   const activePicker = activePick ? members.find(m => m.user_id === activePick.picked_by) : null
   const canFinishActivePick = activePick?.picked_by === uid
   const isRotatingPicker = party.mode === 'rotating_picker'
+  const isCreator = party.creator_id === uid
   const currentPicker = isRotatingPicker ? getCurrentPicker(members, watched.length) : null
   const isMyTurn = currentPicker?.user_id === uid
   const filteredItems = activeItems.filter(item => {
@@ -254,6 +340,7 @@ export default function PartyDetailPage() {
                 type="button"
                 onClick={() => navigate(`/profile/${m.user_id}`)}
                 title={m.user?.display_name || m.user?.username}
+                aria-label={`View ${m.user?.display_name || m.user?.username || 'member'} profile`}
               >
                 <InitialsAvatar name={m.user?.display_name || m.user?.username || '?'} size="sm" />
               </button>
@@ -265,6 +352,13 @@ export default function PartyDetailPage() {
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowSettings(value => !value); setSettingsError('') }}
+              className="btn-press rounded-full border border-[rgba(150,214,180,0.2)] bg-[rgba(9,46,32,0.6)] px-3 py-2 text-xs font-bold text-[rgba(214,240,224,0.78)]"
+            >
+              Manage
+            </button>
             <button
               type="button"
               onClick={handleToggleInviteFriends}
@@ -281,6 +375,44 @@ export default function PartyDetailPage() {
             </button>
           </div>
         </div>
+
+        {showSettings && (
+          <section className="space-y-3 rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] p-4">
+            <div>
+              <p className="text-sm font-extrabold text-[#F7F1E4]">Group settings</p>
+              <p className="mt-0.5 text-xs text-[rgba(214,240,224,0.5)]">{isCreator ? 'Rename, manage members, or delete this group.' : 'You can leave this group at any time.'}</p>
+            </div>
+            {settingsError && <p role="alert" className="text-xs text-rose-300">{settingsError}</p>}
+            {isCreator ? (
+              <>
+                <div className="flex gap-2">
+                  <label className="sr-only" htmlFor="group-name">Group name</label>
+                  <input id="group-name" value={groupName} maxLength={60} onChange={event => setGroupName(event.target.value)} className="input-glass min-w-0 flex-1 py-2 text-sm" />
+                  <button type="button" disabled={settingsBusy || !groupName.trim()} onClick={handleRename} className="btn-press btn-cream rounded-xl px-3 text-xs font-bold disabled:opacity-50">Save</button>
+                </div>
+                {members.filter(member => member.user_id !== uid).map(member => (
+                  <div key={member.user_id} className="flex items-center justify-between gap-3 border-t border-[rgba(150,214,180,0.12)] pt-3">
+                    <span className="truncate text-sm text-[rgba(214,240,224,0.75)]">{member.user?.display_name || member.user?.username}</span>
+                    <button type="button" disabled={settingsBusy} onClick={() => handleRemoveMember(member.user_id)} className="btn-press text-xs font-bold text-rose-300 disabled:opacity-50">Remove</button>
+                  </div>
+                ))}
+                {confirmDelete ? (
+                  <div className="flex items-center justify-between gap-3 border-t border-rose-300/20 pt-3">
+                    <p className="text-xs text-rose-200">Delete this group and its shared list?</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setConfirmDelete(false)} className="btn-press text-xs font-bold text-white/60">Cancel</button>
+                      <button type="button" disabled={settingsBusy} onClick={handleDelete} className="btn-press rounded-full bg-rose-500/80 px-3 py-1.5 text-xs font-bold disabled:opacity-50">Delete</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setConfirmDelete(true)} className="btn-press text-xs font-bold text-rose-300">Delete group</button>
+                )}
+              </>
+            ) : (
+              <button type="button" disabled={settingsBusy} onClick={handleLeave} className="btn-press rounded-full border border-rose-300/30 px-4 py-2 text-xs font-bold text-rose-200 disabled:opacity-50">Leave group</button>
+            )}
+          </section>
+        )}
 
         {showInviteFriends && (
           <section className="overflow-hidden rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)]">
@@ -384,6 +516,8 @@ export default function PartyDetailPage() {
                   canPick={isRotatingPicker && isMyTurn && !activePick}
                   pickingId={pickingId}
                   onPick={handlePick}
+                  canRemove={item.status === 'unwatched' && (item.added_by === uid || isCreator)}
+                  onRemove={handleRemoveItem}
                 />
               ))}
             </div>
@@ -397,8 +531,9 @@ export default function PartyDetailPage() {
               <p className="text-sm font-bold text-[#F7F1E4]">Add to group list</p>
               <button
                 type="button"
+                aria-label="Close add titles panel"
                 onClick={() => { setShowAdd(false); setAddError('') }}
-                className="text-[rgba(214,240,224,0.5)] text-lg leading-none"
+                className="min-h-10 min-w-10 text-[rgba(214,240,224,0.5)] text-lg leading-none"
               >
                 ×
               </button>
@@ -507,7 +642,7 @@ export default function PartyDetailPage() {
   )
 }
 
-function PartyListItem({ item, members, uid, votingId, onVote, canPick = false, pickingId, onPick }) {
+function PartyListItem({ item, members, uid, votingId, onVote, canPick = false, pickingId, onPick, canRemove, onRemove }) {
   const votes = item.party_votes ?? []
   const upvotes = votes.filter(v => v.vote === true)
   const myVote = votes.find(v => v.user_id === uid)
@@ -585,6 +720,8 @@ function PartyListItem({ item, members, uid, votingId, onVote, canPick = false, 
           )}
         </div>
 
+        <div className="flex items-center gap-2">
+        {canRemove && <button type="button" onClick={() => onRemove(item.id)} className="btn-press text-[11px] font-semibold text-rose-300/80">Remove</button>}
         {canPick ? (
           <button
             type="button"
@@ -601,6 +738,7 @@ function PartyListItem({ item, members, uid, votingId, onVote, canPick = false, 
         ) : (
           <span className="text-[11px] font-semibold text-[rgba(214,240,224,0.35)]">{GROUP_STATUS_LABELS[item.status] || 'Active'}</span>
         )}
+        </div>
       </div>
     </div>
   )

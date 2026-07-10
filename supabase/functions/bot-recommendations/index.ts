@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.107.0'
 
 const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
 const TMDB_BASE = 'https://api.themoviedb.org/3'
@@ -11,6 +11,9 @@ const IGDB_BASE = 'https://api.igdb.com/v4'
 const IGDB_COVER = 'https://images.igdb.com/igdb/image/upload/t_cover_big'
 const DEFAULT_PLATFORMS = [8, 9, 15, 337, 384] // Netflix, Prime, Hulu, Disney+, Max
 const ACTIVE_STATUSES = ['not_yet_viewed', 'queued', 'in_progress']
+
+const fetch = (input: string | URL | Request, init: RequestInit = {}) =>
+  globalThis.fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(12_000) })
 
 const FALLBACK_CANDIDATES = [
   {
@@ -357,14 +360,14 @@ async function upsertRecommendationLog(supabase: any, recommendation: any, userI
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  let body: { user_id?: string; force_new?: boolean }
+  let body: { user_id?: string }
   try {
     body = await req.json()
   } catch {
     return json({ error: 'invalid JSON body' }, 400)
   }
 
-  const { user_id, force_new = false } = body
+  const { user_id } = body
   if (!user_id) return json({ error: 'user_id required' }, 400)
 
   const authHeader = req.headers.get('Authorization') ?? ''
@@ -386,7 +389,16 @@ serve(async (req) => {
     { auth: { persistSession: false } }
   )
 
-  const { data: active } = await supabase
+  const { data: allowed, error: limitError } = await supabase.rpc('consume_edge_rate_limit', {
+    p_user_id: user_id,
+    p_action: 'bot_recommendation',
+    p_limit: 10,
+    p_window_seconds: 3600,
+  })
+  if (limitError) return json({ error: limitError.message }, 500)
+  if (!allowed) return json({ error: 'Too many bot requests. Try again later.' }, 429)
+
+  const { data: active, error: activeError } = await supabase
     .from('recommendations')
     .select('id, sender_id, media_title, media_type, media_id, media_creator, media_poster_url, streaming_providers, recipient_status, created_at')
     .eq('sender_id', BOT_USER_ID)
@@ -396,21 +408,23 @@ serve(async (req) => {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (activeError) return json({ error: activeError.message }, 500)
 
-  if (active && !force_new) {
+  if (active) {
     const { error: logError } = await upsertRecommendationLog(supabase, active, user_id)
     if (logError) return json({ error: logError.message }, 500)
 
     return json({ ok: true, sent: 0, active: true, recommendation: active })
   }
 
-  const { data: user } = await supabase
+  const { data: user, error: userError } = await supabase
     .from('users')
     .select('platforms, favorite_genres, watching_style')
     .eq('id', user_id)
     .single()
+  if (userError) return json({ error: userError.message }, 500)
 
-  const [{ data: previousRecs }, { data: previousLog }] = await Promise.all([
+  const [previousRecsResult, previousLogResult] = await Promise.all([
     supabase
       .from('recommendations')
       .select('media_id, media_type')
@@ -422,18 +436,23 @@ serve(async (req) => {
       .select('media_id, media_type, media_title, media_creator, rating, status')
       .eq('user_id', user_id),
   ])
+  if (previousRecsResult.error) return json({ error: previousRecsResult.error.message }, 500)
+  if (previousLogResult.error) return json({ error: previousLogResult.error.message }, 500)
+  const previousRecs = previousRecsResult.data
+  const previousLog = previousLogResult.data
 
   const seen = new Set([
     ...(previousRecs ?? []).map((r: any) => `${r.media_type}:${r.media_id}`),
     ...(previousLog ?? []).map((r: any) => `${r.media_type}:${r.media_id}`),
   ])
 
-  await supabase.from('friendships').upsert({
+  const { error: friendshipError } = await supabase.from('friendships').upsert({
     user_a_id: BOT_USER_ID,
     user_b_id: user_id,
     requester_id: BOT_USER_ID,
     status: 'accepted',
   }, { onConflict: 'user_a_id,user_b_id', ignoreDuplicates: true })
+  if (friendshipError) return json({ error: friendshipError.message }, 500)
 
   const platforms = (user?.platforms?.length ?? 0) > 0 ? user!.platforms : DEFAULT_PLATFORMS
   const providerFilter = platforms.join('|')
@@ -633,6 +652,21 @@ serve(async (req) => {
       if (logError) return json({ error: logError.message }, 500)
 
       return json({ ok: true, sent: 1, active: false, recommendation: data })
+    }
+
+    if (error.code === '23505') {
+      const { data: concurrentActive } = await supabase
+        .from('recommendations')
+        .select('id, sender_id, media_title, media_type, media_id, media_creator, media_poster_url, streaming_providers, recipient_status, created_at')
+        .eq('sender_id', BOT_USER_ID)
+        .eq('recipient_id', user_id)
+        .in('recipient_status', ACTIVE_STATUSES)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (concurrentActive) return json({ ok: true, sent: 0, active: true, recommendation: concurrentActive })
     }
 
     lastInsertError = error.message

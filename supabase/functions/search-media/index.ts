@@ -1,7 +1,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.107.0'
 
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const TMDB_BASE        = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_W300  = 'https://image.tmdb.org/t/p/w300'
 const TMDB_LOGO_ORIG   = 'https://image.tmdb.org/t/p/original'
@@ -97,6 +98,9 @@ function json(data: unknown, status = 200) {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 }
+
+const fetch = (input: string | URL | Request, init: RequestInit = {}) =>
+  globalThis.fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(10_000) })
 
 function mapProviders(list: any[] = []) {
   return list.map((p: any) => ({
@@ -300,14 +304,30 @@ serve(async (req) => {
   const { data: authData, error: authError } = await userClient.auth.getUser()
   if (authError || !authData.user) return json({ error: 'unauthorized' }, 401)
 
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+  })
+  const { data: allowed, error: limitError } = await supabase.rpc('consume_edge_rate_limit', {
+    p_user_id: authData.user.id,
+    p_action: 'search_media',
+    p_limit: 60,
+    p_window_seconds: 60,
+  })
+  if (limitError) return json({ error: limitError.message }, 500)
+  if (!allowed) return json({ error: 'Too many media requests. Try again in a minute.' }, 429)
+
   const { searchParams } = new URL(req.url)
   const action   = searchParams.get('action') ?? 'search'
   const apiKey   = Deno.env.get('TMDB_API_KEY')
+  if (!['search', 'trending', 'providers', 'details'].includes(action)) return json({ error: 'unsupported action' }, 400)
+  if ((searchParams.get('query')?.length ?? 0) > 120) return json({ error: 'query is too long' }, 400)
+  if ((searchParams.get('media_id')?.length ?? 0) > 100) return json({ error: 'media_id is too long' }, 400)
+  if ((searchParams.get('genre')?.length ?? 0) > 80) return json({ error: 'genre is too long' }, 400)
 
   // ── Trending / popular carousels ─────────────────────────────
   if (action === 'trending') {
     const mediaType = searchParams.get('media_type') ?? 'movie'
-    const page      = Number(searchParams.get('page') ?? '1')
+    const page      = Math.min(5, Math.max(1, Number(searchParams.get('page') ?? '1') || 1))
     const offset    = Math.max(0, page - 1) * 24
     const genre     = searchParams.get('genre')
 

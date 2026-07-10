@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -19,6 +19,8 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const latestUsernameRef = useRef('')
+  const usernameId = useId()
+  const displayNameId = useId()
 
   async function checkUsername(val) {
     setUsername(val)
@@ -26,12 +28,19 @@ export default function SetupPage() {
     latestUsernameRef.current = val
     if (val.length < 3) return
     setChecking(true)
-    const { data } = await supabase
+    const { data, error: checkError } = await supabase
       .from('users')
       .select('id')
       .eq('username', val)
       .maybeSingle()
     if (latestUsernameRef.current !== val) return // a newer keystroke superseded this check
+    if (checkError) {
+      setError('Unable to check that username. Please try again.')
+      setAvailable(null)
+      setChecking(false)
+      return
+    }
+    setError('')
     setAvailable(!data)
     setChecking(false)
   }
@@ -53,14 +62,12 @@ export default function SetupPage() {
     if (!available) return
     setLoading(true)
     setError('')
-    const { error } = await supabase.from('users').upsert({
-      id: session.user.id,
-      email: session.user.email,
+    const { error } = await supabase.from('users').update({
       username,
       display_name: displayName || username,
       platforms: selectedPlatforms,
       favorite_genres: selectedGenres,
-    })
+    }).eq('id', session.user.id).select('id').single()
     if (error) { setError(error.message); setLoading(false); return }
     await refreshProfile()
     try {
@@ -89,10 +96,11 @@ export default function SetupPage() {
       <div className="glass w-full max-w-sm rounded-[28px] p-7 anim-up shadow-2xl space-y-5">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Username</label>
+            <label htmlFor={usernameId} className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Username</label>
             <div className="relative">
               <input
                 type="text"
+                id={usernameId}
                 required
                 value={username}
                 onChange={e => checkUsername(e.target.value.toLowerCase())}
@@ -111,11 +119,12 @@ export default function SetupPage() {
           </div>
 
           <div>
-            <label className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">
+            <label htmlFor={displayNameId} className="block text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">
               Display name <span className="text-white/30 normal-case font-normal">(optional)</span>
             </label>
             <input
               type="text"
+              id={displayNameId}
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
               placeholder="Your Name"
@@ -136,6 +145,7 @@ export default function SetupPage() {
                     key={p.id}
                     type="button"
                     onClick={() => togglePlatform(p.id)}
+                    aria-pressed={active}
                     className="btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
                     style={{
                       background: active ? p.color : 'rgba(255,255,255,0.1)',
@@ -170,6 +180,7 @@ export default function SetupPage() {
                           key={`${group.key}-${g}`}
                           type="button"
                           onClick={() => toggleGenre(g)}
+                          aria-pressed={active}
                           className="btn-press text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
                           style={{
                             background: active ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',

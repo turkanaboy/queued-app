@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "node --test",
     "verify:release": "npm run lint && npm run test && npm run build",
-    "mobile:sync": "npm run build && cap sync"
+    "mobile:sync": "npm run build && cap sync && node scripts/fix-capacitor-spm-path.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",

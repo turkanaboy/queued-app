@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { invokeEdgeFunction } from '../lib/edgeFunctions'
 import { Chip, MEDIA, MEDIA_ORDER, PosterTile, SearchField, SheetShell } from '../lib/queuedDesign'
 import { ratingLabel, stepToRating } from '../lib/ratings'
@@ -26,6 +26,12 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   const [review, setReview] = useState('')
   const debounceRef = useRef(null)
   const latestQueryRef = useRef('')
+  const providerRequestRef = useRef(0)
+
+  useEffect(() => () => {
+    clearTimeout(debounceRef.current)
+    providerRequestRef.current += 1
+  }, [])
 
   async function search(q, type = searchType) {
     setQuery(q)
@@ -51,16 +57,23 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
   }
 
   async function selectTitle(item) {
+    const requestId = ++providerRequestRef.current
     setSelected(item)
     setResults([])
+    setProviders(null)
+    setError('')
     if (!['movie', 'tv'].includes(item.media_type)) {
       setProviders([])
       return
     }
-    const json = await invokeEdgeFunction('search-media', {
-      path: `?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`,
-    })
-    setProviders(json.providers ?? [])
+    try {
+      const json = await invokeEdgeFunction('search-media', {
+        path: `?action=providers&media_type=${item.media_type}&media_id=${item.media_id}`,
+      })
+      if (providerRequestRef.current === requestId) setProviders(json.providers ?? [])
+    } catch (err) {
+      if (providerRequestRef.current === requestId) setError(err.message || 'Could not load streaming options.')
+    }
   }
 
   function changeType(t) {
@@ -103,7 +116,7 @@ export default function LogMediaSheet({ userId, onClose, onSaved }) {
           {results.length > 0 && (
             <div className="max-h-[280px] overflow-y-auto rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
               {results.map((r, i) => (
-                <button key={r.media_id} onClick={() => selectTitle(r)}
+                <button key={`${r.media_type}:${r.media_id}`} onClick={() => selectTitle(r)}
                   className={`btn-press flex w-full items-center gap-3 px-[13px] py-[11px] text-left ${i ? 'border-t border-[rgba(150,214,180,0.12)]' : ''}`}>
                   <PosterTile item={r} w={34} h={52} radius={8} />
                   <div className="min-w-0 flex-1">
