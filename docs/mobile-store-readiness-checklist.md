@@ -131,7 +131,7 @@ Recommended path for this repo: Capacitor.
 - `[ ]` Add app version/build number process.
 - `[!]` Add crash/error monitoring.
 - `[!]` Add analytics only if desired and disclosed.
-- `[!]` Add support contact email.
+- `[~]` Add authenticated in-app feedback routed to `info@myqueued.com`; app/function work is complete, but the configured `RESEND_API_KEY` must be allowed to send from the verified `myqueued.com` domain.
 - `[!]` Add deletion/support instructions.
 - `[!]` Prepare screenshots and store copy.
 - `[!]` Submit first internal/beta build.
@@ -175,3 +175,4 @@ Do not run the repair until a current database backup exists and the first migra
 - 2026-06-15: Verified Android resolves `queued://auth/callback?code=test-code` into `com.queued.app/.MainActivity` on emulator `emulator-5554`. Real Supabase auth still requires adding `queued://auth/callback` to the project's Auth redirect allow-list.
 - 2026-06-16: Added generated app icon and native splash assets using the Q monogram mark with the broader tagline, "Share what's worth your time." Source previews live in `docs/mockups/assets/`, and platform PNGs were written into Android and iOS resource folders.
 - 2026-07-10: Hardened group RLS and vote integrity, made recommendation/trivia transitions atomic, added database-backed Edge Function quotas, pinned Edge dependencies, added account export/deletion, fixed native callback validation/listener cleanup/iOS package paths, disabled Android backups, and added focused database/auth regression checks. Verified the linked production schema already contains both legacy `20260607` changes, consolidated them into one canonical local timestamp, and documented the required one-time production ledger repair.
+- 2026-07-15: Added an authenticated feedback modal on the user's Profile. Submissions are rate-limited and sent server-side through a Supabase Edge Function to `info@myqueued.com` without opening the user's email app. Resend rejected the setup delivery because the configured sending-only API key is not authorized for `feedback@myqueued.com`; the domain itself is already used by the separate magic-link mail configuration.

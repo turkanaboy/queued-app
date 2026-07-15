@@ -11,6 +11,7 @@ import { displayRating } from '../lib/ratings'
 import { setRecommendationState } from '../lib/mediaLog'
 import LogMediaSheet from '../components/LogMediaSheet'
 import RatingModal from '../components/RatingModal'
+import FeedbackModal from '../components/FeedbackModal'
 import { ProviderRows, RecommendationSheet } from '../components/RecommendationComposer'
 import { fetchMyChallenges, MAX_SCORE } from '../lib/trivia'
 import {
@@ -69,6 +70,7 @@ export default function ProfilePage() {
   const [actionError, setActionError] = useState('')
   const [accountBusy, setAccountBusy] = useState(false)
   const [confirmAccountDelete, setConfirmAccountDelete] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
 
   useEffect(() => {
     fetchProfile()
@@ -540,13 +542,16 @@ export default function ProfilePage() {
         />
 
         {isOwnProfile && (
-          <AccountSection
-            busy={accountBusy}
-            confirmingDelete={confirmAccountDelete}
-            setConfirmingDelete={setConfirmAccountDelete}
-            onExport={exportAccountData}
-            onDelete={deleteAccount}
-          />
+          <>
+            <SupportSection onFeedback={() => setShowFeedback(true)} />
+            <AccountSection
+              busy={accountBusy}
+              confirmingDelete={confirmAccountDelete}
+              setConfirmingDelete={setConfirmAccountDelete}
+              onExport={exportAccountData}
+              onDelete={deleteAccount}
+            />
+          </>
         )}
 
         {triviaHistory.length > 0 && (
@@ -573,6 +578,7 @@ export default function ProfilePage() {
       {showLogSheet && <LogMediaSheet userId={session.user.id} onClose={() => setShowLogSheet(false)} onSaved={handleLogSheetSaved} />}
       {editingLogItem && <RatingModal item={editingLogItem} existingEntry={editingLogItem} onClose={() => setEditingLogItem(null)} onSaved={() => { fetchMediaLog(); fetchStats(); setEditingLogItem(null) }} onRecommend={() => { setRecommendItem(editingLogItem); setEditingLogItem(null) }} />}
       {recommendItem && <RecommendationSheet initialItem={recommendItem} onClose={() => setRecommendItem(null)} />}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
     </div>
   )
 }
@@ -795,6 +801,21 @@ function PlatformsSection({ isOwnProfile, profile, editing, setEditing, selected
           return p ? <span key={id} className="rounded-full px-3 py-1.5 text-xs font-bold text-white" style={{ background: p.color }}>{platformInitials(p.name)}</span> : null
         })}</div>
       ) : <p className="rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-center text-sm text-[rgba(214,240,224,0.5)]">No platforms listed</p>}
+    </section>
+  )
+}
+
+function SupportSection({ onFeedback }) {
+  return (
+    <section>
+      <SectionTitle>Help &amp; feedback</SectionTitle>
+      <button type="button" onClick={onFeedback} className="btn-press flex w-full items-center justify-between rounded-[18px] border border-[rgba(150,214,180,0.16)] bg-[rgba(12,62,44,0.55)] px-4 py-3 text-left shadow-[inset_3px_0_0_rgba(184,115,51,0.62)]">
+        <span>
+          <span className="block text-sm font-extrabold text-[#F7F1E4]">Send feedback</span>
+          <span className="mt-0.5 block text-[12px] font-semibold text-[rgba(214,240,224,0.5)]">Share an idea or report a problem</span>
+        </span>
+        <span aria-hidden="true" className="text-xl text-[#D8A84A]">&#8594;</span>
+      </button>
     </section>
   )
 }
